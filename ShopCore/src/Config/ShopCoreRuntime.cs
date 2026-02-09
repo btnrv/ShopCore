@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SwiftlyS2.Shared.Commands;
@@ -21,7 +23,11 @@ public partial class ShopCore
     private void InitializeConfiguration()
     {
         _ = Core.Configuration
-            .InitializeJsonWithModel<ShopCoreConfig>(ConfigFileName, ConfigSectionName)
+            .InitializeJsonWithModel<ShopCoreConfig>(ConfigFileName, ConfigSectionName);
+
+        EnsureConfigContainsMissingDefaults();
+
+        _ = Core.Configuration
             .Configure(builder => { _ = builder.AddJsonFile(ConfigFileName, optional: false, reloadOnChange: true); });
 
         Settings = Core.Configuration.Manager
@@ -400,6 +406,101 @@ public partial class ShopCore
                 SendLocalizedChat(player, "shop.credits.timed_income", timedIncome.AmountPerInterval, timedIncome.IntervalSeconds);
             }
         }
+    }
+
+    private void EnsureConfigContainsMissingDefaults()
+    {
+        try
+        {
+            var configPath = Core.Configuration.GetConfigPath(ConfigFileName);
+            if (!File.Exists(configPath))
+            {
+                return;
+            }
+
+            var options = new JsonNodeOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+
+            var jsonDocOptions = new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            };
+
+            var currentRoot = JsonNode.Parse(File.ReadAllText(configPath), options, jsonDocOptions) as JsonObject;
+            if (currentRoot is null)
+            {
+                return;
+            }
+
+            var defaultsRoot = JsonSerializer.SerializeToNode(
+                new Dictionary<string, object?>
+                {
+                    [ConfigSectionName] = new ShopCoreConfig()
+                },
+                new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = null,
+                    WriteIndented = true
+                }) as JsonObject;
+
+            if (defaultsRoot is null)
+            {
+                return;
+            }
+
+            var changed = MergeMissingNodes(currentRoot, defaultsRoot);
+            if (!changed)
+            {
+                return;
+            }
+
+            File.WriteAllText(
+                configPath,
+                currentRoot.ToJsonString(new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = null
+                }));
+
+            Core.Logger.LogInformation("ShopCore config schema updated with missing default keys.");
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.LogWarning(ex, "Failed to apply automatic ShopCore config schema update.");
+        }
+    }
+
+    private static bool MergeMissingNodes(JsonObject current, JsonObject defaults)
+    {
+        var changed = false;
+
+        foreach (var kvp in defaults)
+        {
+            if (kvp.Value is null)
+            {
+                continue;
+            }
+
+            if (!current.TryGetPropertyValue(kvp.Key, out var currentNode) || currentNode is null)
+            {
+                current[kvp.Key] = kvp.Value.DeepClone();
+                changed = true;
+                continue;
+            }
+
+            if (currentNode is JsonObject currentObj && kvp.Value is JsonObject defaultObj)
+            {
+                if (MergeMissingNodes(currentObj, defaultObj))
+                {
+                    changed = true;
+                }
+            }
+        }
+
+        return changed;
     }
 
     private bool ReloadRuntimeConfiguration(out string? error)
