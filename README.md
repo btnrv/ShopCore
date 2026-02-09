@@ -240,6 +240,9 @@ Main capabilities exposed to other plugins:
 - Enable/disable item per player.
 - Read item expiration timestamp.
 - Subscribe to events:
+  - `OnBeforeItemPurchase` (cancelable)
+  - `OnBeforeItemSell` (cancelable)
+  - `OnBeforeItemToggle` (cancelable)
   - `OnItemRegistered`
   - `OnItemPurchased`
   - `OnItemSold`
@@ -250,7 +253,7 @@ Main capabilities exposed to other plugins:
 
 `ShopTransactionResult` returns:
 
-- `Status` (`Success`, `ItemNotFound`, `ItemDisabled`, `TeamNotAllowed`, `AlreadyOwned`, `NotOwned`, `NotSellable`, `InsufficientCredits`, `InvalidAmount`, `InternalError`)
+- `Status` (`Success`, `ItemNotFound`, `ItemDisabled`, `TeamNotAllowed`, `AlreadyOwned`, `NotOwned`, `NotSellable`, `InsufficientCredits`, `InvalidAmount`, `InternalError`, `BlockedByModule`)
 - `Message`
 - `Item`
 - `CreditsAfter`
@@ -303,6 +306,20 @@ public class MyModuleConfig
 {
   public decimal DefaultPrice { get; set; } = 400;
 }
+```
+
+### Cancelable Hook Example
+
+```csharp
+// Example: block expensive items for non-admin players.
+shop.OnBeforeItemPurchase += context =>
+{
+    if (context.Item.Price > 5000 && !Core.Permission.HasFlag(context.Player, "shop.vip"))
+    {
+        context.BlockLocalized("shop.error.vip_required", context.Item.DisplayName);
+        // or: context.Block("You need VIP to buy this item.");
+    }
+};
 ```
 
 ## Localization

@@ -36,7 +36,80 @@ public enum ShopTransactionStatus
     NotSellable = 6,
     InsufficientCredits = 7,
     InvalidAmount = 8,
-    InternalError = 9
+    InternalError = 9,
+    BlockedByModule = 10
+}
+
+/// <summary>
+/// Mutable context for cancelable pre-action hooks.
+/// Modules can block by calling <see cref="Block"/> or <see cref="BlockLocalized"/>.
+/// </summary>
+public abstract class ShopBeforeActionContext
+{
+    protected ShopBeforeActionContext(IPlayer player, ShopItemDefinition item)
+    {
+        Player = player;
+        Item = item;
+    }
+
+    public IPlayer Player { get; }
+    public ShopItemDefinition Item { get; }
+    public bool IsBlocked { get; private set; }
+    public string Message { get; private set; } = string.Empty;
+    public string TranslationKey { get; private set; } = string.Empty;
+    public object[] TranslationArgs { get; private set; } = [];
+
+    public void Block(string message)
+    {
+        IsBlocked = true;
+        Message = message ?? string.Empty;
+        TranslationKey = string.Empty;
+        TranslationArgs = [];
+    }
+
+    public void BlockLocalized(string translationKey, params object[] args)
+    {
+        IsBlocked = true;
+        TranslationKey = translationKey ?? string.Empty;
+        TranslationArgs = args ?? [];
+
+        if (string.IsNullOrWhiteSpace(Message))
+        {
+            Message = "Action blocked by module.";
+        }
+    }
+}
+
+/// <summary>
+/// Cancelable purchase request context.
+/// </summary>
+public sealed class ShopBeforePurchaseContext : ShopBeforeActionContext
+{
+    public ShopBeforePurchaseContext(IPlayer player, ShopItemDefinition item) : base(player, item) { }
+}
+
+/// <summary>
+/// Cancelable sell request context.
+/// </summary>
+public sealed class ShopBeforeSellContext : ShopBeforeActionContext
+{
+    public ShopBeforeSellContext(IPlayer player, ShopItemDefinition item) : base(player, item) { }
+}
+
+/// <summary>
+/// Cancelable toggle request context.
+/// </summary>
+public sealed class ShopBeforeToggleContext : ShopBeforeActionContext
+{
+    public ShopBeforeToggleContext(IPlayer player, ShopItemDefinition item, bool targetEnabled) : base(player, item)
+    {
+        TargetEnabled = targetEnabled;
+    }
+
+    /// <summary>
+    /// Desired new enabled state.
+    /// </summary>
+    public bool TargetEnabled { get; }
 }
 /// <summary>
 /// Immutable definition of one shop item.
@@ -86,6 +159,21 @@ public interface IShopCoreApiV1
     /// Wallet kind used by the shop economy.
     /// </summary>
     string WalletKind { get; }
+
+    /// <summary>
+    /// Fired before purchase processing. Handlers can block this operation.
+    /// </summary>
+    event Action<ShopBeforePurchaseContext>? OnBeforeItemPurchase;
+
+    /// <summary>
+    /// Fired before sell processing. Handlers can block this operation.
+    /// </summary>
+    event Action<ShopBeforeSellContext>? OnBeforeItemSell;
+
+    /// <summary>
+    /// Fired before toggle processing. Handlers can block this operation.
+    /// </summary>
+    event Action<ShopBeforeToggleContext>? OnBeforeItemToggle;
 
     /// <summary>
     /// Fired when an item is registered.

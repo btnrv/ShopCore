@@ -27,6 +27,9 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
 
     public string WalletKind => plugin.Settings.Credits.WalletName;
 
+    public event Action<ShopBeforePurchaseContext>? OnBeforeItemPurchase;
+    public event Action<ShopBeforeSellContext>? OnBeforeItemSell;
+    public event Action<ShopBeforeToggleContext>? OnBeforeItemToggle;
     public event Action<ShopItemDefinition>? OnItemRegistered;
     public event Action<IPlayer, ShopItemDefinition>? OnItemPurchased;
     public event Action<IPlayer, ShopItemDefinition, decimal>? OnItemSold;
@@ -375,6 +378,11 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             );
         }
 
+        if (TryRunBeforePurchaseHook(player, item, out var blockedByModule))
+        {
+            return blockedByModule;
+        }
+
         var isConsumable = item.Type == ShopItemType.Consumable;
         if (!isConsumable && IsItemOwned(player, item.Id))
         {
@@ -481,6 +489,11 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
                 "shop.error.not_sellable",
                 item.DisplayName
             );
+        }
+
+        if (TryRunBeforeSellHook(player, item, out var blockedByModule))
+        {
+            return blockedByModule;
         }
 
         if (!IsItemOwned(player, item.Id))
@@ -625,6 +638,11 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             return true;
         }
 
+        if (RunBeforeToggleHook(player, item, enabled))
+        {
+            return false;
+        }
+
         plugin.playerCookies.Set(player, EnabledKey(item.Id), enabled);
 
         if (enabled && item.Duration.HasValue)
@@ -690,6 +708,92 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             Status: status,
             Message: message
         );
+    }
+
+    private bool TryRunBeforePurchaseHook(IPlayer player, ShopItemDefinition item, out ShopTransactionResult result)
+    {
+        var context = new ShopBeforePurchaseContext(player, item);
+
+        try
+        {
+            OnBeforeItemPurchase?.Invoke(context);
+        }
+        catch (Exception ex)
+        {
+            plugin.LogWarning(ex, "OnBeforeItemPurchase hook failed for item '{ItemId}'.", item.Id);
+        }
+
+        return TryResolveBlockedHook(context, item, out result);
+    }
+
+    private bool TryRunBeforeSellHook(IPlayer player, ShopItemDefinition item, out ShopTransactionResult result)
+    {
+        var context = new ShopBeforeSellContext(player, item);
+
+        try
+        {
+            OnBeforeItemSell?.Invoke(context);
+        }
+        catch (Exception ex)
+        {
+            plugin.LogWarning(ex, "OnBeforeItemSell hook failed for item '{ItemId}'.", item.Id);
+        }
+
+        return TryResolveBlockedHook(context, item, out result);
+    }
+
+    private bool RunBeforeToggleHook(IPlayer player, ShopItemDefinition item, bool targetEnabled)
+    {
+        var context = new ShopBeforeToggleContext(player, item, targetEnabled);
+
+        try
+        {
+            OnBeforeItemToggle?.Invoke(context);
+        }
+        catch (Exception ex)
+        {
+            plugin.LogWarning(ex, "OnBeforeItemToggle hook failed for item '{ItemId}'.", item.Id);
+        }
+
+        if (!context.IsBlocked)
+        {
+            return false;
+        }
+
+        SendBlockedMessage(context);
+        return true;
+    }
+
+    private bool TryResolveBlockedHook(ShopBeforeActionContext context, ShopItemDefinition item, out ShopTransactionResult result)
+    {
+        if (!context.IsBlocked)
+        {
+            result = default!;
+            return false;
+        }
+
+        SendBlockedMessage(context);
+        var message = string.IsNullOrWhiteSpace(context.Message) ? "Action blocked by module." : context.Message;
+        result = new ShopTransactionResult(
+            Status: ShopTransactionStatus.BlockedByModule,
+            Message: message,
+            Item: item
+        );
+        return true;
+    }
+
+    private void SendBlockedMessage(ShopBeforeActionContext context)
+    {
+        if (!string.IsNullOrWhiteSpace(context.TranslationKey))
+        {
+            plugin.SendLocalizedChat(context.Player, context.TranslationKey, context.TranslationArgs);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(context.Message))
+        {
+            plugin.SendChatRaw(context.Player, context.Message);
+        }
     }
 
     private decimal ResolveSellPrice(ShopItemDefinition item)

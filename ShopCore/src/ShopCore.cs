@@ -186,6 +186,33 @@ public partial class ShopCore : BasePlugin
         });
     }
 
+    internal void SendChatRaw(IPlayer player, string message)
+    {
+        Core.Scheduler.NextWorldUpdate(() =>
+        {
+            try
+            {
+                if (player is null || !player.IsValid)
+                {
+                    return;
+                }
+
+                var prefix = TryGetChatPrefix(player);
+                if (!string.IsNullOrWhiteSpace(prefix) && !message.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    player.SendChat($"{prefix} {message}");
+                    return;
+                }
+
+                player.SendChat(message);
+            }
+            catch (Exception ex)
+            {
+                Core.Logger.LogWarning(ex, "Failed to send raw chat message.");
+            }
+        });
+    }
+
     internal string Localize(IPlayer player, string key, params object[] args)
     {
         try
