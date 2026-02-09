@@ -315,6 +315,7 @@ public partial class ShopCore
         var timedIncome = Settings.Credits.TimedIncome;
         var shopCorePath = GetPluginPath("ShopCore");
         var templateCount = CountCentralModuleTemplateFiles(shopCorePath);
+        var ledgerMode = shopApi.GetLedgerStoreMode();
 
         ReplyCommand(context, "shop.admin.status.header");
         ReplyCommand(context, "shop.admin.status.dependencies", hasCookies, hasEconomy);
@@ -322,6 +323,7 @@ public partial class ShopCore
         ReplyCommand(context, "shop.admin.status.items", itemCount, categoryCount);
         ReplyCommand(context, "shop.admin.status.players", onlinePlayers);
         ReplyCommand(context, "shop.admin.status.timed_income", timedIncome.Enabled, timedIncome.AmountPerInterval, timedIncome.IntervalSeconds);
+        ReplyCommand(context, "shop.admin.status.ledger", ledgerMode);
         ReplyCommand(context, "shop.admin.status.templates", templateCount);
     }
 

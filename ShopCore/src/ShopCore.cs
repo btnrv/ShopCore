@@ -83,6 +83,7 @@ public partial class ShopCore : BasePlugin
         }
 
         economyApi.EnsureWalletKind(shopApi.WalletKind);
+        shopApi.ConfigureLedgerStore(Settings.Ledger, Core.PluginDataDirectory);
         RegisterConfiguredCommands();
         SubscribeEvents();
         ApplyStartingBalanceToConnectedPlayers();
@@ -123,6 +124,7 @@ public partial class ShopCore : BasePlugin
         StopTimedIncome();
         UnsubscribeEvents();
         UnregisterConfiguredCommands();
+        shopApi.DisposeLedgerStore();
     }
 
     internal string? GetPluginPath(string pluginId)

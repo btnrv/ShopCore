@@ -46,6 +46,7 @@
   "shop.admin.status.items": "Items: [lightyellow]{0}[default], Categories: [lightyellow]{1}[default]",
   "shop.admin.status.players": "Online players: [lightyellow]{0}[default]",
   "shop.admin.status.timed_income": "Timed income -> Enabled: [lightyellow]{0}[default], Amount: [lightyellow]{1}[default], Interval: [lightyellow]{2}[default]s",
+  "shop.admin.status.ledger": "Ledger backend: [lightyellow]{0}[default]",
   "shop.admin.status.templates": "Central module templates: [lightyellow]{0}[default]",
 
   "shop.menu.comment": "Select an option",

@@ -123,6 +123,22 @@ ShopCore reads config from the `Main` section.
 | `AllowSelling`           | `true`  | Enables/disables selling items.                              |
 | `DefaultSellRefundRatio` | `0.50`  | Fallback refund ratio when item does not define `SellPrice`. |
 
+### Ledger (`Main.Ledger`)
+
+| Setting              | Default | Description                                           |
+| :------------------- | :------ | :---------------------------------------------------- |
+| `Enabled`            | `true`  | Enables transaction ledger recording.                 |
+| `MaxInMemoryEntries` | `2000`  | Max entries kept when using in-memory ledger backend. |
+
+### Ledger Persistence (`Main.Ledger.Persistence`)
+
+| Setting             | Default | Description                                                                 |
+| :------------------ | :------ | :-------------------------------------------------------------------------- |
+| `Enabled`           | `false` | Enables persistent ledger backend via FreeSql.                              |
+| `Provider`          | `sqlite`| Persistence provider (`sqlite` currently supported).                        |
+| `ConnectionString`  | `""`    | FreeSql connection string. Empty = `${PluginDataDirectory}/shopcore_ledger.sqlite3`. |
+| `AutoSyncStructure` | `true`  | Auto-creates/updates the ledger table structure.                            |
+
 ### Example
 
 ```jsonc
@@ -175,6 +191,16 @@ ShopCore reads config from the `Main` section.
       "AllowSelling": true,
       "DefaultSellRefundRatio": 0.5,
     },
+    "Ledger": {
+      "Enabled": true,
+      "MaxInMemoryEntries": 2000,
+      "Persistence": {
+        "Enabled": false,
+        "Provider": "sqlite",
+        "ConnectionString": "",
+        "AutoSyncStructure": true
+      }
+    }
   },
 }
 ```

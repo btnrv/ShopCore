@@ -41,6 +41,8 @@ public partial class ShopCore
         Settings.Credits.AdminAdjustments ??= new AdminCreditAdjustmentsConfig();
         Settings.Menus ??= new MenusConfig();
         Settings.Behavior ??= new BehaviorConfig();
+        Settings.Ledger ??= new LedgerConfig();
+        Settings.Ledger.Persistence ??= new LedgerPersistenceConfig();
 
         Settings.Commands.OpenShopMenu = NormalizeCommandList(Settings.Commands.OpenShopMenu, ["shop", "store"]);
         Settings.Commands.OpenBuyMenu = NormalizeCommandList(Settings.Commands.OpenBuyMenu, ["buy"]);
@@ -108,6 +110,20 @@ public partial class ShopCore
         if (Settings.Behavior.DefaultSellRefundRatio > 1m)
         {
             Settings.Behavior.DefaultSellRefundRatio = 1m;
+        }
+
+        if (Settings.Ledger.MaxInMemoryEntries < 100)
+        {
+            Settings.Ledger.MaxInMemoryEntries = 100;
+        }
+
+        if (string.IsNullOrWhiteSpace(Settings.Ledger.Persistence.Provider))
+        {
+            Settings.Ledger.Persistence.Provider = "sqlite";
+        }
+        else
+        {
+            Settings.Ledger.Persistence.Provider = Settings.Ledger.Persistence.Provider.Trim().ToLowerInvariant();
         }
     }
 
@@ -395,6 +411,7 @@ public partial class ShopCore
             StopTimedIncome();
             UnregisterConfiguredCommands();
             InitializeConfiguration();
+            shopApi.ConfigureLedgerStore(Settings.Ledger, Core.PluginDataDirectory);
             RegisterConfiguredCommands();
             ApplyStartingBalanceToConnectedPlayers();
             StartTimedIncome();

@@ -10,7 +10,6 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
 {
     public const string DefaultWalletKind = "credits";
     private const string CookiePrefix = "shopcore:item";
-    private const int MaxLedgerEntries = 2000;
     private static readonly JsonSerializerOptions ConfigJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -18,9 +17,10 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
 
     private readonly ShopCore plugin;
     private readonly object sync = new();
+    private readonly object ledgerStoreSync = new();
     private readonly Dictionary<string, ShopItemDefinition> itemsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HashSet<string>> categoryToIds = new(StringComparer.OrdinalIgnoreCase);
-    private readonly LinkedList<ShopLedgerEntry> ledgerEntries = [];
+    private IShopLedgerStore ledgerStore = new InMemoryShopLedgerStore(2000);
 
     public ShopCoreApiV1(ShopCore plugin)
     {
@@ -38,6 +38,38 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
     public event Action<IPlayer, ShopItemDefinition, bool>? OnItemToggled;
     public event Action<IPlayer, ShopItemDefinition>? OnItemExpired;
     public event Action<ShopLedgerEntry>? OnLedgerEntryRecorded;
+
+    internal void ConfigureLedgerStore(LedgerConfig config, string pluginDataDirectory)
+    {
+        var replacement = CreateLedgerStore(config, pluginDataDirectory);
+        IShopLedgerStore previous;
+        lock (ledgerStoreSync)
+        {
+            previous = ledgerStore;
+            ledgerStore = replacement;
+        }
+        previous.Dispose();
+    }
+
+    internal void DisposeLedgerStore()
+    {
+        IShopLedgerStore current;
+        lock (ledgerStoreSync)
+        {
+            current = ledgerStore;
+            ledgerStore = new InMemoryShopLedgerStore(100);
+        }
+
+        current.Dispose();
+    }
+
+    internal string GetLedgerStoreMode()
+    {
+        lock (ledgerStoreSync)
+        {
+            return ledgerStore.Mode;
+        }
+    }
 
     public bool RegisterItem(ShopItemDefinition item)
     {
@@ -685,15 +717,13 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
 
     public IReadOnlyCollection<ShopLedgerEntry> GetRecentLedgerEntries(int maxEntries = 100)
     {
-        if (maxEntries <= 0)
+        IShopLedgerStore current;
+        lock (ledgerStoreSync)
         {
-            return Array.Empty<ShopLedgerEntry>();
+            current = ledgerStore;
         }
 
-        lock (sync)
-        {
-            return ledgerEntries.Take(maxEntries).ToArray();
-        }
+        return current.GetRecent(maxEntries);
     }
 
     public IReadOnlyCollection<ShopLedgerEntry> GetRecentLedgerEntriesForPlayer(IPlayer player, int maxEntries = 50)
@@ -703,13 +733,13 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             return Array.Empty<ShopLedgerEntry>();
         }
 
-        lock (sync)
+        IShopLedgerStore current;
+        lock (ledgerStoreSync)
         {
-            return ledgerEntries
-                .Where(entry => entry.SteamId == player.SteamID)
-                .Take(maxEntries)
-                .ToArray();
+            current = ledgerStore;
         }
+
+        return current.GetRecentForSteamId(player.SteamID, maxEntries);
     }
 
     private static string NormalizeItemId(string itemId) => itemId.Trim().ToLowerInvariant();
@@ -736,13 +766,19 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             ItemDisplayName: item?.DisplayName
         );
 
-        lock (sync)
+        try
         {
-            ledgerEntries.AddFirst(entry);
-            while (ledgerEntries.Count > MaxLedgerEntries)
+            IShopLedgerStore current;
+            lock (ledgerStoreSync)
             {
-                ledgerEntries.RemoveLast();
+                current = ledgerStore;
             }
+
+            current.Record(entry);
+        }
+        catch (Exception ex)
+        {
+            plugin.LogWarning(ex, "Failed to persist ledger entry for action '{Action}'.", action);
         }
 
         OnLedgerEntryRecorded?.Invoke(entry);
@@ -763,6 +799,60 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
         }
 
         return $"#{player.PlayerID}";
+    }
+
+    private IShopLedgerStore CreateLedgerStore(LedgerConfig config, string pluginDataDirectory)
+    {
+        if (!config.Enabled)
+        {
+            return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
+        }
+
+        if (!config.Persistence.Enabled)
+        {
+            return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
+        }
+
+        if (!string.Equals(config.Persistence.Provider, "sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            plugin.LogWarning(
+                "Unsupported ledger persistence provider '{Provider}'. Falling back to in-memory ledger.",
+                config.Persistence.Provider
+            );
+            return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
+        }
+
+        try
+        {
+            var connectionString = ResolveSqliteConnectionString(config.Persistence.ConnectionString, pluginDataDirectory);
+            return new FreeSqlShopLedgerStore(connectionString, config.Persistence.AutoSyncStructure);
+        }
+        catch (Exception ex)
+        {
+            plugin.LogWarning(
+                ex,
+                "Failed to initialize FreeSql ledger store. Falling back to in-memory ledger."
+            );
+            return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
+        }
+    }
+
+    private static string ResolveSqliteConnectionString(string configuredValue, string pluginDataDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(configuredValue))
+        {
+            var defaultPath = Path.Combine(pluginDataDirectory, "shopcore_ledger.sqlite3");
+            return $"Data Source={defaultPath}";
+        }
+
+        var value = configuredValue.Trim();
+        if (!value.Contains('='))
+        {
+            var path = Path.IsPathRooted(value) ? value : Path.Combine(pluginDataDirectory, value);
+            return $"Data Source={path}";
+        }
+
+        return value;
     }
 
     private void EnsureApis()

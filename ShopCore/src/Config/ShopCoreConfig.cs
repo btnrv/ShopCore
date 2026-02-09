@@ -6,6 +6,7 @@ public sealed class ShopCoreConfig
     public CreditsConfig Credits { get; set; } = new();
     public MenusConfig Menus { get; set; } = new();
     public BehaviorConfig Behavior { get; set; } = new();
+    public LedgerConfig Ledger { get; set; } = new();
 }
 
 public sealed class CommandsConfig
@@ -76,4 +77,19 @@ public sealed class AdminCreditAdjustmentsConfig
 {
     public bool NotifyTargetPlayer { get; set; } = true;
     public bool ClampRemovalToAvailableBalance { get; set; } = true;
+}
+
+public sealed class LedgerConfig
+{
+    public bool Enabled { get; set; } = true;
+    public int MaxInMemoryEntries { get; set; } = 2000;
+    public LedgerPersistenceConfig Persistence { get; set; } = new();
+}
+
+public sealed class LedgerPersistenceConfig
+{
+    public bool Enabled { get; set; } = false;
+    public string Provider { get; set; } = "sqlite";
+    public string ConnectionString { get; set; } = string.Empty;
+    public bool AutoSyncStructure { get; set; } = true;
 }
