@@ -1,0 +1,12 @@
+{
+    "module.coinflip.disabled": "Coinflip is disabled.",
+    "module.coinflip.usage": "Usage: !{0} <amount>",
+    "module.coinflip.invalid_bet": "Invalid bet. Allowed range: {0}-{1}.",
+    "module.coinflip.min_bet": "Minimum bet is {0}.",
+    "module.coinflip.max_bet": "Maximum bet is {0}.",
+    "module.coinflip.cooldown": "Wait {0} seconds before your next bet.",
+    "module.coinflip.no_credits": "You don't have enough credits to bet {0}.",
+    "module.coinflip.internal_error": "Coinflip failed. Try again.",
+    "module.coinflip.won": "You won [green]+{0}[default] credits. Balance: [green]{1}[default].",
+    "module.coinflip.lost": "You lost [red]{0}[default] credits. Balance: [green]{1}[default]."
+}
