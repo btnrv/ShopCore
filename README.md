@@ -21,6 +21,22 @@ ShopCore is the base shop system for SwiftlyS2. It provides:
 - Item state persistence and expiration via `Cookies.Player.V1`.
 - Optional item selling, gifting, starting credits, and timed income.
 
+## Included Modules
+
+Current repository modules built for ShopCore:
+
+- `Shop_Healthshot`: Healthshot consumables and timed healthshot ownership.
+- `Shop_SmokeColor`: Smoke grenade color customization.
+- `Shop_Killscreen`: Kill-screen visual trigger item.
+- `Shop_Bhop`: Bunnyhop item with smooth convar replication behavior.
+- `Shop_Coinflip`: Credit coinflip system integrated with ShopCore credits.
+- `Shop_Flags`: Player chat/identity flags integration.
+- `Shop_HitSounds`: Hit sound playback module.
+- `Shop_Parachute`: Hold-`E` parachute with per-item physics settings.
+- `Shop_PlayerColor`: Player render-color module (static and rainbow).
+- `Shop_PlayerModels`: Player model items with team-default fallback.
+- `Shop_Tracers`: Bullet tracer beam module (static/team/random color modes).
+
 ## Requirements
 
 This plugin depends on these shared interfaces:

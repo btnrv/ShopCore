@@ -611,7 +611,7 @@ public class Shop_Tracers : BasePlugin
             var hours = (int)ts.TotalHours;
             var minutes = ts.Minutes;
             return minutes > 0
-                ? $"{hours} Hour{(hours == 1 ? "" : "s")} {minutes} Minute{(minutes == 1 ? "" : "s")}" 
+                ? $"{hours} Hour{(hours == 1 ? "" : "s")} {minutes} Minute{(minutes == 1 ? "" : "s")}"
                 : $"{hours} Hour{(hours == 1 ? "" : "s")}";
         }
 
@@ -620,7 +620,7 @@ public class Shop_Tracers : BasePlugin
             var minutes = (int)ts.TotalMinutes;
             var seconds = ts.Seconds;
             return seconds > 0
-                ? $"{minutes} Minute{(minutes == 1 ? "" : "s")} {seconds} Second{(seconds == 1 ? "" : "s")}" 
+                ? $"{minutes} Minute{(minutes == 1 ? "" : "s")} {seconds} Second{(seconds == 1 ? "" : "s")}"
                 : $"{minutes} Minute{(minutes == 1 ? "" : "s")}";
         }
 
