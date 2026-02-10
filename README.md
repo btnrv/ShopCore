@@ -16,7 +16,7 @@
 ShopCore is the base shop system for SwiftlyS2. It provides:
 
 - A shared contract (`IShopCoreApiV1`) for other plugins to register items and interact with credits.
-- Buy and inventory menus with category navigation.
+- Buy and inventory menus with category and optional subcategory navigation.
 - Credit economy integration via `Economy.API.v1`.
 - Item state persistence and expiration via `Cookies.Player.V1`.
 - Optional item selling, gifting, starting credits, and timed income.
@@ -44,6 +44,7 @@ All command aliases are configurable in `shopcore.jsonc`.
 | `!givecredits <target> <amount>` / `!addcredits ...`                        | Adds credits to a player (admin permission required).      |
 | `!removecredits <target> <amount>` / `!takecredits ...` / `!subcredits ...` | Removes credits from a player (admin permission required). |
 | `!shopcorereload` / `!shopreload`                                            | Reloads ShopCore runtime config and command bindings.      |
+| `!reloadmodulesconfig` / `!shopmodulesreload`                                | Reloads ShopCore module config sync and reloads known shop modules. |
 | `!shopcorestatus` / `!shopstatus`                                            | Shows ShopCore runtime diagnostics.                        |
 
 Default admin permission: `shopcore.admin.credits`
@@ -71,6 +72,7 @@ ShopCore reads config from the `Main` section.
 | `GiveCredits`   | `["givecredits", "addcredits"]`                  | Aliases to add credits to a target.            |
 | `RemoveCredits` | `["removecredits", "takecredits", "subcredits"]` | Aliases to remove credits from a target.       |
 | `ReloadCore`    | `["shopcorereload", "shopreload"]`               | Aliases to reload ShopCore config/commands.    |
+| `ReloadModulesConfig` | `["reloadmodulesconfig", "shopmodulesreload"]` | Aliases to re-sync module configs and reload known ShopCore modules. |
 | `Status`        | `["shopcorestatus", "shopstatus"]`               | Aliases to show ShopCore runtime status.       |
 
 ### Credits (`Main.Credits`)
@@ -156,6 +158,7 @@ ShopCore reads config from the `Main` section.
         "GiveCredits": ["givecredits", "addcredits"],
         "RemoveCredits": ["removecredits", "takecredits", "subcredits"],
         "ReloadCore": ["shopcorereload", "shopreload"],
+        "ReloadModulesConfig": ["reloadmodulesconfig", "shopmodulesreload"],
         "Status": ["shopcorestatus", "shopstatus"],
       },
     },
@@ -226,9 +229,29 @@ This means each module can ship defaults, while server owners manage all module 
 
 - Centralized file has priority after first creation.
 - Copy happens only when centralized file is missing.
+- If module config loads empty items, module defaults can be written back to centralized config through `SaveModuleTemplateConfig`.
 - JSONC is supported (comments + trailing commas).
 - `sectionName` (usually `Main`) is optional; if not found, root object is used.
 - Invalid relative paths (absolute paths / `..`) are rejected for safety.
+
+## Category and Subcategory System
+
+ShopCore now supports optional subcategories by using category paths in item definitions.
+
+- Single level: `Visuals`
+- With subcategory: `Visuals/Smoke Colors` or `Visuals > Smoke Colors`
+
+Menus resolve this as:
+
+- `Category -> Items` when no subcategories exist
+- `Category -> Subcategory -> Items` when subcategories are present
+
+This is fully backward compatible with existing one-level categories.
+
+## Module Updates
+
+- `Shop_Killscreen`: added kill screen module.
+- `Shop_SmokeColor`: updated to use subcategory under `Visuals/Smoke Colors`.
 
 ### Recommended Layout
 

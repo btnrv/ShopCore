@@ -22,7 +22,7 @@ public class Shop_SmokeColor : BasePlugin
     private const string ModulePluginId = "Shop_SmokeColor";
     private const string TemplateFileName = "items_config.jsonc";
     private const string TemplateSectionName = "Main";
-    private const string DefaultCategory = "Visuals";
+    private const string DefaultCategory = "Visuals/Smoke Colors";
 
     private IShopCoreApiV1? shopApi;
     private bool handlersRegistered;
@@ -571,7 +571,7 @@ internal sealed class SmokeColorModuleConfig
 }
 internal sealed class SmokeColorModuleSettings
 {
-    public string Category { get; set; } = "Visuals";
+    public string Category { get; set; } = "Visuals/Smoke Colors";
 }
 internal sealed class SmokeColorItemTemplate
 {

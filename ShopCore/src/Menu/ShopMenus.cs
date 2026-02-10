@@ -98,7 +98,7 @@ public partial class ShopCore
             .ToArray();
 
         var grouped = items
-            .GroupBy(item => item.Category, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(item => ParseCategoryPath(item.Category).Category, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -116,7 +116,7 @@ public partial class ShopCore
             categoryButton.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildBuyItemsMenu(args.Player, category, parentMenu));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildBuySubcategoryOrItemsMenu(args.Player, category, parentMenu));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(categoryButton);
@@ -125,18 +125,63 @@ public partial class ShopCore
         return builder.Build();
     }
 
-    private IMenuAPI BuildBuyItemsMenu(IPlayer player, string category, IMenuAPI? parent = null)
+    private IMenuAPI BuildBuySubcategoryOrItemsMenu(IPlayer player, string category, IMenuAPI? parent = null)
     {
+        var items = shopApi.GetItems()
+            .Where(item => item.Enabled && CategoryMatches(item, category, null))
+            .ToArray();
+
+        if (items.Length == 0)
+        {
+            var emptyBuilder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, category);
+            _ = emptyBuilder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category", category)) { Enabled = false });
+            return emptyBuilder.Build();
+        }
+
+        var grouped = items
+            .GroupBy(item => ParseCategoryPath(item.Category).Subcategory ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var hasSubcategories = grouped.Any(group => !string.IsNullOrWhiteSpace(group.Key));
+        if (!hasSubcategories)
+        {
+            return BuildBuyItemsMenu(player, category, null, parent);
+        }
+
         var builder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, category);
-        var items = shopApi.GetItemsByCategory(category)
+        foreach (var subgroup in grouped)
+        {
+            var subcategory = string.IsNullOrWhiteSpace(subgroup.Key) ? null : subgroup.Key;
+            var displayName = subcategory ?? Localize(player, "shop.menu.subcategory.general");
+            var count = subgroup.Count();
+            var button = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", displayName, count));
+            button.Click += (sender, args) =>
+            {
+                var parentMenu = (sender as IMenuOption)?.Menu;
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildBuyItemsMenu(args.Player, category, subcategory, parentMenu));
+                return ValueTask.CompletedTask;
+            };
+            _ = builder.AddOption(button);
+        }
+
+        return builder.Build();
+    }
+
+    private IMenuAPI BuildBuyItemsMenu(IPlayer player, string category, string? subcategory = null, IMenuAPI? parent = null)
+    {
+        var categoryPathText = BuildCategoryPathText(category, subcategory);
+        var builder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, categoryPathText);
+        var items = shopApi.GetItems()
             .Where(item => item.Enabled)
+            .Where(item => CategoryMatches(item, category, subcategory))
             .OrderBy(item => item.Price)
             .ThenBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (items.Length == 0)
         {
-            _ = builder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category", category)) { Enabled = false });
+            _ = builder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category", categoryPathText)) { Enabled = false });
             return builder.Build();
         }
 
@@ -149,7 +194,7 @@ public partial class ShopCore
                 _ = shopApi.PurchaseItem(args.Player, item.Id);
                 var currentMenu = (sender as IMenuOption)?.Menu;
                 var parentMenu = currentMenu?.Parent.ParentMenu ?? parent;
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildBuyItemsMenu(args.Player, category, parentMenu));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildBuyItemsMenu(args.Player, category, subcategory, parentMenu));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(itemButton);
@@ -166,7 +211,7 @@ public partial class ShopCore
             .ToArray();
 
         var grouped = inventoryItems
-            .GroupBy(item => item.Category, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(item => ParseCategoryPath(item.Category).Category, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -184,7 +229,7 @@ public partial class ShopCore
             categoryButton.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, parentMenu));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventorySubcategoryOrItemsMenu(args.Player, category, parentMenu));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(categoryButton);
@@ -193,17 +238,63 @@ public partial class ShopCore
         return builder.Build();
     }
 
-    private IMenuAPI BuildInventoryItemsMenu(IPlayer player, string category, IMenuAPI? parent = null)
+    private IMenuAPI BuildInventorySubcategoryOrItemsMenu(IPlayer player, string category, IMenuAPI? parent = null)
     {
-        var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, category);
-        var items = shopApi.GetItemsByCategory(category)
+        var items = shopApi.GetItems()
             .Where(item => shopApi.IsItemOwned(player, item.Id))
+            .Where(item => CategoryMatches(item, category, null))
+            .ToArray();
+
+        if (items.Length == 0)
+        {
+            var emptyBuilder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, category);
+            _ = emptyBuilder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category_inventory", category)) { Enabled = false });
+            return emptyBuilder.Build();
+        }
+
+        var grouped = items
+            .GroupBy(item => ParseCategoryPath(item.Category).Subcategory ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var hasSubcategories = grouped.Any(group => !string.IsNullOrWhiteSpace(group.Key));
+        if (!hasSubcategories)
+        {
+            return BuildInventoryItemsMenu(player, category, null, parent);
+        }
+
+        var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, category);
+        foreach (var subgroup in grouped)
+        {
+            var subcategory = string.IsNullOrWhiteSpace(subgroup.Key) ? null : subgroup.Key;
+            var displayName = subcategory ?? Localize(player, "shop.menu.subcategory.general");
+            var count = subgroup.Count();
+            var button = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", displayName, count));
+            button.Click += (sender, args) =>
+            {
+                var parentMenu = (sender as IMenuOption)?.Menu;
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, subcategory, parentMenu));
+                return ValueTask.CompletedTask;
+            };
+            _ = builder.AddOption(button);
+        }
+
+        return builder.Build();
+    }
+
+    private IMenuAPI BuildInventoryItemsMenu(IPlayer player, string category, string? subcategory = null, IMenuAPI? parent = null)
+    {
+        var categoryPathText = BuildCategoryPathText(category, subcategory);
+        var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, categoryPathText);
+        var items = shopApi.GetItems()
+            .Where(item => shopApi.IsItemOwned(player, item.Id))
+            .Where(item => CategoryMatches(item, category, subcategory))
             .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (items.Length == 0)
         {
-            _ = builder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category_inventory", category)) { Enabled = false });
+            _ = builder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category_inventory", categoryPathText)) { Enabled = false });
             return builder.Build();
         }
 
@@ -218,7 +309,7 @@ public partial class ShopCore
             button.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemActionMenu(args.Player, item, parentMenu));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemActionMenu(args.Player, item, category, subcategory, parentMenu));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(button);
@@ -227,7 +318,12 @@ public partial class ShopCore
         return builder.Build();
     }
 
-    private IMenuAPI BuildInventoryItemActionMenu(IPlayer player, ShopItemDefinition item, IMenuAPI? parent = null)
+    private IMenuAPI BuildInventoryItemActionMenu(
+        IPlayer player,
+        ShopItemDefinition item,
+        string category,
+        string? subcategory = null,
+        IMenuAPI? parent = null)
     {
         var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.item.title", parent, item.DisplayName);
 
@@ -267,7 +363,7 @@ public partial class ShopCore
             var nextEnabled = !shopApi.IsItemEnabled(args.Player, item.Id);
             _ = shopApi.SetItemEnabled(args.Player, item.Id, nextEnabled);
             var parentMenu = (sender as IMenuOption)?.Menu;
-            Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemActionMenu(args.Player, item, parentMenu));
+            Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemActionMenu(args.Player, item, category, subcategory, parentMenu));
             return ValueTask.CompletedTask;
         };
         _ = builder.AddOption(toggleButton);
@@ -279,7 +375,7 @@ public partial class ShopCore
             sellButton.Click += (sender, args) =>
             {
                 _ = shopApi.SellItem(args.Player, item.Id);
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, item.Category, parent));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, subcategory, parent));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(sellButton);
@@ -402,5 +498,58 @@ public partial class ShopCore
         }
 
         return value.ToString("0.##");
+    }
+
+    private static (string Category, string? Subcategory) ParseCategoryPath(string categoryPath)
+    {
+        if (string.IsNullOrWhiteSpace(categoryPath))
+        {
+            return ("Misc", null);
+        }
+
+        var segments = categoryPath
+            .Split(['/', '>'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(segment => segment.Trim())
+            .Where(segment => !string.IsNullOrWhiteSpace(segment))
+            .ToArray();
+
+        if (segments.Length == 0)
+        {
+            return ("Misc", null);
+        }
+
+        if (segments.Length == 1)
+        {
+            return (segments[0], null);
+        }
+
+        return (segments[0], string.Join(" / ", segments.Skip(1)));
+    }
+
+    private static bool CategoryMatches(ShopItemDefinition item, string category, string? subcategory)
+    {
+        var parsed = ParseCategoryPath(item.Category);
+        if (!string.Equals(parsed.Category, category, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(subcategory))
+        {
+            // Category-only match should include both direct-category and subcategory items.
+            return true;
+        }
+
+        return string.Equals(parsed.Subcategory, subcategory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildCategoryPathText(string category, string? subcategory)
+    {
+        if (string.IsNullOrWhiteSpace(subcategory))
+        {
+            return category;
+        }
+
+        return $"{category} > {subcategory}";
     }
 }
