@@ -24,6 +24,8 @@ public class Shop_Parachute : BasePlugin
     private const string TemplateFileName = "items_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Movement/Parachute";
+    private const float VelocityUpdateIntervalSeconds = 0.05f;
+    private const float VelocityEpsilon = 0.5f;
 
     private IShopCoreApiV1? shopApi;
     private bool handlersRegistered;
@@ -31,6 +33,7 @@ public class Shop_Parachute : BasePlugin
     private readonly List<string> registeredItemOrder = new();
     private readonly Dictionary<string, ParachuteItemRuntime> itemRuntimeById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, bool> parachuteActiveByPlayer = new();
+    private readonly Dictionary<int, float> nextVelocityUpdateAtByPlayer = new();
 
     public Shop_Parachute(ISwiftlyCore core) : base(core) { }
 
@@ -89,6 +92,7 @@ public class Shop_Parachute : BasePlugin
         }
 
         parachuteActiveByPlayer.Clear();
+        nextVelocityUpdateAtByPlayer.Clear();
         UnregisterItemsAndHandlers();
     }
 
@@ -99,6 +103,7 @@ public class Shop_Parachute : BasePlugin
         if (player is not null && player.IsValid && !player.IsFakeClient)
         {
             parachuteActiveByPlayer[player.PlayerID] = false;
+            nextVelocityUpdateAtByPlayer.Remove(player.PlayerID);
             RestoreDefaultGravity(player);
         }
 
@@ -112,6 +117,7 @@ public class Shop_Parachute : BasePlugin
         if (player is not null && player.IsValid && !player.IsFakeClient)
         {
             parachuteActiveByPlayer[player.PlayerID] = false;
+            nextVelocityUpdateAtByPlayer.Remove(player.PlayerID);
             RestoreDefaultGravity(player);
         }
 
@@ -121,6 +127,7 @@ public class Shop_Parachute : BasePlugin
     private void OnClientDisconnected(IOnClientDisconnectedEvent @event)
     {
         parachuteActiveByPlayer.Remove(@event.PlayerId);
+        nextVelocityUpdateAtByPlayer.Remove(@event.PlayerId);
     }
 
     private void OnTick()
@@ -340,20 +347,29 @@ public class Shop_Parachute : BasePlugin
         }
 
         var targetFallSpeed = -MathF.Abs(runtime.FallSpeed);
-        if (runtime.Linear || runtime.FallDecrease <= 0f)
+        var currentTime = Core.Engine.GlobalVars.CurrentTime;
+        if (!nextVelocityUpdateAtByPlayer.TryGetValue(player.PlayerID, out var nextApplyTime) ||
+            currentTime >= nextApplyTime)
         {
-            velocity.Z = targetFallSpeed;
-        }
-        else
-        {
-            velocity.Z = Math.Max(velocity.Z + MathF.Abs(runtime.FallDecrease), targetFallSpeed);
-        }
+            var newZ = runtime.Linear || runtime.FallDecrease <= 0f
+                ? targetFallSpeed
+                : Math.Max(velocity.Z + MathF.Abs(runtime.FallDecrease), targetFallSpeed);
 
-        pawn.AbsVelocity = velocity;
-        pawn.VelocityUpdated();
+            if (MathF.Abs(velocity.Z - newZ) > VelocityEpsilon)
+            {
+                velocity.Z = newZ;
+                pawn.AbsVelocity = velocity;
+                pawn.VelocityUpdated();
+            }
+
+            nextVelocityUpdateAtByPlayer[player.PlayerID] = currentTime + VelocityUpdateIntervalSeconds;
+        }
 
         var gravityScale = Math.Clamp(runtime.GravityScale, 0.01f, 1.0f);
-        pawn.GravityScale = gravityScale;
+        if (!IsParachuteActive(player) || MathF.Abs(pawn.GravityScale - gravityScale) > 0.001f)
+        {
+            pawn.GravityScale = gravityScale;
+        }
 
         parachuteActiveByPlayer[player.PlayerID] = true;
     }
@@ -361,6 +377,7 @@ public class Shop_Parachute : BasePlugin
     private void DeactivateParachute(IPlayer player)
     {
         parachuteActiveByPlayer[player.PlayerID] = false;
+        nextVelocityUpdateAtByPlayer.Remove(player.PlayerID);
         RestoreDefaultGravity(player);
     }
 
@@ -377,7 +394,10 @@ public class Shop_Parachute : BasePlugin
             return;
         }
 
-        pawn.GravityScale = 1.0f;
+        if (MathF.Abs(pawn.GravityScale - 1.0f) > 0.001f)
+        {
+            pawn.GravityScale = 1.0f;
+        }
     }
 
     private static bool IsUsePressed(IPlayer player)
