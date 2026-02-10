@@ -13,9 +13,9 @@ namespace ShopCore;
 [PluginMetadata(
     Id = "Shop_Healthshot",
     Name = "Shop Healthshot",
-    Author = "mariu",
+    Author = "T3Marius",
     Version = "1.0.0",
-    Description = "Example ShopCore module with healthshot items."
+    Description = "ShopCore module with healthshot items."
 )]
 public class Shop_Healtshot : BasePlugin
 {
