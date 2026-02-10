@@ -1,4 +1,0 @@
-{
-  "module.spawn_effects.item.default.name": "Spawn Effect ({0})",
-  "module.spawn_effects.error.permission": "You need permission [lightred]{1}[default] to buy [lightred]{0}[default]."
-}
