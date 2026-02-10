@@ -1,0 +1,8 @@
+{
+  "shop.prefix": "[gold]\u2605[red] [Store][default]",
+
+  "module.tracers.item.temporary.name": "{0} Tracer ({1})",
+  "module.tracers.item.permanent.name": "{0} Tracer (Perm)",
+
+  "module.tracers.error.permission": "You need permission [lightred]{1}[default] to buy [lightred]{0}[default]."
+}
