@@ -1,0 +1,6 @@
+{
+    "module.parachute.item.basic.name": "Basic Parachute ({0})",
+    "module.parachute.item.premium.name": "Premium Parachute ({0})",
+    "module.parachute.item.permanent.name": "Permanent Parachute",
+    "module.parachute.error.permission": "You need [{1}] to purchase {0}."
+}
