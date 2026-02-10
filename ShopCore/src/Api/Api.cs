@@ -837,6 +837,11 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
         }
 
         plugin.playerCookies.Save(player);
+        plugin.SendLocalizedChat(
+            player,
+            enabled ? "shop.item.equipped" : "shop.item.unequipped",
+            item.DisplayName
+        );
         OnItemToggled?.Invoke(player, item, enabled);
         return true;
     }

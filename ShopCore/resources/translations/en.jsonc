@@ -14,6 +14,8 @@
   "shop.purchase.success": "Purchased [lime]{0}[default] for [lime]{1}[default]. Balance: [lime]{2}[default].",
   "shop.sell.success": "Sold [lime]{0}[default] for [lime]{1}[default]. Balance: [lime]{2}[default].",
   "shop.item.expired": "Your item [lightyellow]{0}[default] has expired.",
+  "shop.item.equipped": "Equipped [lime]{0}[default].",
+  "shop.item.unequipped": "Unequipped [lightyellow]{0}[default].",
 
   "shop.credits.current": "Your credits: [lime]{0}[default]",
   "shop.credits.starting_balance_applied": "Starting balance applied: [lime]{0}[default] credits.",
