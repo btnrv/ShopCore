@@ -145,6 +145,64 @@ public partial class ShopCore : BasePlugin
         }
     }
 
+    internal string GetCentralModuleConfigsDirectoryPath()
+    {
+        return Path.Combine(
+            Core.CSGODirectory,
+            "addons",
+            "swiftlys2",
+            "configs",
+            "plugins",
+            "ShopCore",
+            "modules"
+        );
+    }
+
+    internal string BuildCentralModuleConfigPath(string modulePluginId, string normalizedRelativeConfigPath)
+    {
+        var normalized = string.IsNullOrWhiteSpace(normalizedRelativeConfigPath)
+            ? "items_config.jsonc"
+            : normalizedRelativeConfigPath.Trim();
+
+        var fileName = Path.GetFileName(normalized);
+        var safeFileName = SanitizeFileNameSegment(fileName);
+
+        return Path.Combine(GetCentralModuleConfigsDirectoryPath(), safeFileName);
+    }
+
+    internal string BuildLegacyModuleScopedCentralModuleConfigPath(string modulePluginId, string normalizedRelativeConfigPath)
+    {
+        var moduleId = string.IsNullOrWhiteSpace(modulePluginId) ? "UnknownModule" : modulePluginId.Trim();
+        var normalized = string.IsNullOrWhiteSpace(normalizedRelativeConfigPath)
+            ? "items_config.jsonc"
+            : normalizedRelativeConfigPath.Trim();
+
+        var safeModuleId = SanitizeFileNameSegment(moduleId);
+        var safePath = normalized
+            .Replace('/', '_')
+            .Replace('\\', '_');
+        safePath = SanitizeFileNameSegment(safePath);
+
+        return Path.Combine(GetCentralModuleConfigsDirectoryPath(), $"{safeModuleId}__{safePath}");
+    }
+
+    private static string SanitizeFileNameSegment(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "config";
+        }
+
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray());
+        while (sanitized.Contains("..", StringComparison.Ordinal))
+        {
+            sanitized = sanitized.Replace("..", "__", StringComparison.Ordinal);
+        }
+
+        return string.IsNullOrWhiteSpace(sanitized) ? "config" : sanitized;
+    }
+
     internal void LogWarning(string message, params object[] args)
     {
         Core.Logger.LogWarning(message, args);
