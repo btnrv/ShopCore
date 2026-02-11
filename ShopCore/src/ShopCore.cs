@@ -3,6 +3,7 @@ using Economy.Contract;
 using Microsoft.Extensions.Logging;
 using ShopCore.Contract;
 using SwiftlyS2.Shared;
+using SwiftlyS2.Shared.Database;
 using SwiftlyS2.Shared.Players;
 using SwiftlyS2.Shared.Plugins;
 using SwiftlyS2.Shared.Translation;
@@ -157,6 +158,19 @@ public partial class ShopCore : BasePlugin
     internal void LogDebug(string message, params object[] args)
     {
         Core.Logger.LogDebug(message, args);
+    }
+
+    internal DatabaseConnectionInfo? TryGetDatabaseConnectionInfo(string connectionName)
+    {
+        try
+        {
+            return Core.Database.GetConnectionInfo(connectionName);
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.LogWarning(ex, "Failed to resolve Core.Database connection info for '{ConnectionName}'.", connectionName);
+            return null;
+        }
     }
 
     internal void SendLocalizedChat(IPlayer player, string key, params object[] args)

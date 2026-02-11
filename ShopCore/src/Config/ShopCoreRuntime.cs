@@ -132,6 +132,15 @@ public partial class ShopCore
         {
             Settings.Ledger.Persistence.Provider = Settings.Ledger.Persistence.Provider.Trim().ToLowerInvariant();
         }
+
+        if (string.IsNullOrWhiteSpace(Settings.Ledger.Persistence.ConnectionName))
+        {
+            Settings.Ledger.Persistence.ConnectionName = "default";
+        }
+        else
+        {
+            Settings.Ledger.Persistence.ConnectionName = Settings.Ledger.Persistence.ConnectionName.Trim();
+        }
     }
 
     private static List<string> NormalizeCommandList(List<string>? values, IEnumerable<string> fallback)

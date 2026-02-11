@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Cookies.Contract;
 using Economy.Contract;
+using FreeSql;
 using ShopCore.Contract;
+using SwiftlyS2.Shared.Database;
 using SwiftlyS2.Shared.Players;
 
 namespace ShopCore;
@@ -957,19 +959,39 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
         }
 
-        if (!string.Equals(config.Persistence.Provider, "sqlite", StringComparison.OrdinalIgnoreCase))
-        {
-            plugin.LogWarning(
-                "Unsupported ledger persistence provider '{Provider}'. Falling back to in-memory ledger.",
-                config.Persistence.Provider
-            );
-            return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
-        }
-
         try
         {
-            var connectionString = ResolveSqliteConnectionString(config.Persistence.ConnectionString, pluginDataDirectory);
-            return new FreeSqlShopLedgerStore(connectionString, config.Persistence.AutoSyncStructure);
+            var connectionName = string.IsNullOrWhiteSpace(config.Persistence.ConnectionName)
+                ? "default"
+                : config.Persistence.ConnectionName.Trim();
+            var databaseInfo = TryGetDatabaseConnectionInfo(connectionName);
+
+            if (!TryResolvePersistenceProvider(config.Persistence.Provider, databaseInfo, out var dataType, out var providerName))
+            {
+                plugin.LogWarning(
+                    "Unsupported ledger persistence provider '{Provider}'. Falling back to in-memory ledger.",
+                    config.Persistence.Provider
+                );
+                return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
+            }
+
+            var connectionString = ResolvePersistenceConnectionString(
+                dataType,
+                config.Persistence.ConnectionString,
+                pluginDataDirectory,
+                databaseInfo
+            );
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                plugin.LogWarning(
+                    "Unable to resolve {Provider} connection string for ledger persistence. Falling back to in-memory ledger.",
+                    providerName
+                );
+                return new InMemoryShopLedgerStore(config.MaxInMemoryEntries);
+            }
+
+            return new FreeSqlShopLedgerStore(dataType, connectionString, config.Persistence.AutoSyncStructure);
         }
         catch (Exception ex)
         {
@@ -981,22 +1003,119 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
         }
     }
 
-    private static string ResolveSqliteConnectionString(string configuredValue, string pluginDataDirectory)
+    private DatabaseConnectionInfo? TryGetDatabaseConnectionInfo(string connectionName)
     {
-        if (string.IsNullOrWhiteSpace(configuredValue))
+        return plugin.TryGetDatabaseConnectionInfo(connectionName);
+    }
+
+    private static bool TryResolvePersistenceProvider(
+        string configuredProvider,
+        DatabaseConnectionInfo? databaseInfo,
+        out DataType dataType,
+        out string providerName)
+    {
+        var provider = configuredProvider?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (provider is "sqlite" or "sqlite3")
         {
-            var defaultPath = Path.Combine(pluginDataDirectory, "shopcore_ledger.sqlite3");
-            return $"Data Source={defaultPath}";
+            dataType = DataType.Sqlite;
+            providerName = "sqlite";
+            return true;
         }
 
-        var value = configuredValue.Trim();
-        if (!value.Contains('='))
+        if (provider is "mysql" or "mariadb")
+        {
+            dataType = DataType.MySql;
+            providerName = "mysql";
+            return true;
+        }
+
+        if (provider is "" or "auto")
+        {
+            if (databaseInfo.HasValue && TryMapDriverToDataType(databaseInfo.Value.Driver, out dataType, out providerName))
+            {
+                return true;
+            }
+
+            dataType = DataType.Sqlite;
+            providerName = "sqlite";
+            return true;
+        }
+
+        dataType = default;
+        providerName = string.Empty;
+        return false;
+    }
+
+    private static string ResolvePersistenceConnectionString(
+        DataType dataType,
+        string configuredValue,
+        string pluginDataDirectory,
+        DatabaseConnectionInfo? databaseInfo)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return ResolveConfiguredConnectionString(dataType, configuredValue, pluginDataDirectory);
+        }
+
+        if (databaseInfo.HasValue && TryMapDriverToDataType(databaseInfo.Value.Driver, out var driverDataType, out _))
+        {
+            if (driverDataType == dataType)
+            {
+                return databaseInfo.Value.ToString();
+            }
+        }
+
+        return dataType switch
+        {
+            DataType.Sqlite => $"Data Source={Path.Combine(pluginDataDirectory, "shopcore_ledger.sqlite3")}",
+            _ => string.Empty
+        };
+    }
+
+    private static string ResolveConfiguredConnectionString(DataType dataType, string configuredValue, string pluginDataDirectory)
+    {
+        var value = ExpandPathTokens(configuredValue.Trim(), pluginDataDirectory);
+
+        if (dataType != DataType.Sqlite)
+        {
+            return value;
+        }
+
+        if (!value.Contains('=') && !value.Contains("://", StringComparison.Ordinal))
         {
             var path = Path.IsPathRooted(value) ? value : Path.Combine(pluginDataDirectory, value);
             return $"Data Source={path}";
         }
 
         return value;
+    }
+
+    private static string ExpandPathTokens(string value, string pluginDataDirectory)
+    {
+        return value
+            .Replace("${PluginDataDirectory}", pluginDataDirectory, StringComparison.OrdinalIgnoreCase)
+            .Replace("$(PluginDataDirectory)", pluginDataDirectory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryMapDriverToDataType(string? driver, out DataType dataType, out string providerName)
+    {
+        var normalizedDriver = driver?.Trim().ToLowerInvariant();
+        switch (normalizedDriver)
+        {
+            case "sqlite":
+                dataType = DataType.Sqlite;
+                providerName = "sqlite";
+                return true;
+            case "mysql":
+            case "mariadb":
+                dataType = DataType.MySql;
+                providerName = "mysql";
+                return true;
+            default:
+                dataType = default;
+                providerName = string.Empty;
+                return false;
+        }
     }
 
     private void EnsureApis()

@@ -153,8 +153,9 @@ ShopCore reads config from the `Main` section.
 | Setting             | Default  | Description                                                                          |
 | :------------------ | :------- | :----------------------------------------------------------------------------------- |
 | `Enabled`           | `false`  | Enables persistent ledger backend via FreeSql.                                       |
-| `Provider`          | `sqlite` | Persistence provider (`sqlite` currently supported).                                 |
-| `ConnectionString`  | `""`     | FreeSql connection string. Empty = `${PluginDataDirectory}/shopcore_ledger.sqlite3`. |
+| `Provider`          | `sqlite` | Persistence provider (`sqlite`, `mysql`, or `auto`).                                |
+| `ConnectionName`    | `default`| Swiftly database connection name used when `ConnectionString` is empty.              |
+| `ConnectionString`  | `""`     | FreeSql connection string. Supports `${PluginDataDirectory}` token for sqlite paths. |
 | `AutoSyncStructure` | `true`   | Auto-creates/updates the ledger table structure.                                     |
 
 ### Example
@@ -216,6 +217,7 @@ ShopCore reads config from the `Main` section.
       "Persistence": {
         "Enabled": false,
         "Provider": "sqlite",
+        "ConnectionName": "default",
         "ConnectionString": "",
         "AutoSyncStructure": true,
       },
