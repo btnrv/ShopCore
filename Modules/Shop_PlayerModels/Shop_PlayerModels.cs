@@ -5,6 +5,7 @@ using SwiftlyS2.Shared.Events;
 using SwiftlyS2.Shared.GameEventDefinitions;
 using SwiftlyS2.Shared.GameEvents;
 using SwiftlyS2.Shared.Misc;
+using SwiftlyS2.Shared.Natives;
 using SwiftlyS2.Shared.Players;
 using SwiftlyS2.Shared.Plugins;
 using SwiftlyS2.Shared.SchemaDefinitions;
@@ -25,6 +26,8 @@ public class Shop_PlayerModels : BasePlugin
     private const string TemplateFileName = "playermodels_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Visuals/Player Models";
+    private const float PreviewDurationSeconds = 8f;
+    private const float PreviewDistance = 75f;
 
     private IShopCoreApiV1? shopApi;
     private bool handlersRegistered;
@@ -199,6 +202,7 @@ public class Shop_PlayerModels : BasePlugin
         shopApi.OnItemToggled += OnItemToggled;
         shopApi.OnItemSold += OnItemSold;
         shopApi.OnItemExpired += OnItemExpired;
+        shopApi.OnItemPreview += OnItemPreview;
         handlersRegistered = true;
 
         Core.Logger.LogInformation(
@@ -218,6 +222,7 @@ public class Shop_PlayerModels : BasePlugin
         shopApi.OnItemToggled -= OnItemToggled;
         shopApi.OnItemSold -= OnItemSold;
         shopApi.OnItemExpired -= OnItemExpired;
+        shopApi.OnItemPreview -= OnItemPreview;
 
         foreach (var itemId in registeredItemIds)
         {
@@ -305,6 +310,21 @@ public class Shop_PlayerModels : BasePlugin
         }
 
         ApplyConfiguredOrDefaultModel(player);
+    }
+
+    private void OnItemPreview(IPlayer player, ShopItemDefinition item)
+    {
+        if (!registeredItemIds.Contains(item.Id))
+        {
+            return;
+        }
+
+        if (!itemRuntimeById.TryGetValue(item.Id, out var runtime))
+        {
+            return;
+        }
+
+        SpawnPreviewModel(player, runtime.ModelPath, item.DisplayName);
     }
 
     private void ApplyConfiguredOrDefaultModel(IPlayer player)
@@ -407,6 +427,89 @@ public class Shop_PlayerModels : BasePlugin
                 Core.Logger.LogWarning(ex, "Failed to apply model '{ModelPath}' to player {PlayerId}.", modelPath, player.PlayerID);
             }
         });
+    }
+
+    private void SpawnPreviewModel(IPlayer player, string modelPath, string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath))
+        {
+            return;
+        }
+
+        Core.Scheduler.NextWorldUpdate(() =>
+        {
+            if (!TryGetAlivePawn(player, out var pawn))
+            {
+                return;
+            }
+
+            CDynamicProp? preview = null;
+            try
+            {
+                var origin = pawn.AbsOrigin ?? Vector.Zero;
+                var rotation = pawn.AbsRotation ?? QAngle.Zero;
+                var yawRadians = rotation.Y * (MathF.PI / 180f);
+                var previewPosition = new Vector(
+                    origin.X + (MathF.Cos(yawRadians) * PreviewDistance),
+                    origin.Y + (MathF.Sin(yawRadians) * PreviewDistance),
+                    origin.Z
+                );
+
+                preview = Core.EntitySystem.CreateEntityByDesignerName<CDynamicProp>("prop_dynamic_override");
+                if (preview is null || !preview.IsValid)
+                {
+                    return;
+                }
+
+                preview.Teleport(previewPosition, rotation, Vector.Zero);
+                preview.DispatchSpawn();
+                preview.SetModel(modelPath);
+
+                player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.player_models.preview.started", displayName, (int)PreviewDurationSeconds]}");
+            }
+            catch (Exception ex)
+            {
+                Core.Logger.LogWarning(ex, "Failed to spawn player model preview for '{DisplayName}'.", displayName);
+                return;
+            }
+
+            Core.Scheduler.DelayBySeconds(PreviewDurationSeconds, () =>
+            {
+                Core.Scheduler.NextWorldUpdate(() =>
+                {
+                    try
+                    {
+                        if (preview is not null && preview.IsValid)
+                        {
+                            preview.Despawn();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Core.Logger.LogWarning(ex, "Failed to despawn player model preview.");
+                    }
+                });
+            });
+        });
+    }
+
+    private static bool TryGetAlivePawn(IPlayer player, out CCSPlayerPawn pawn)
+    {
+        pawn = null!;
+
+        if (player is null || !player.IsValid || player.IsFakeClient)
+        {
+            return false;
+        }
+
+        var playerPawn = player.PlayerPawn;
+        if (playerPawn is null || !playerPawn.IsValid || playerPawn.LifeState != (int)LifeState_t.LIFE_ALIVE)
+        {
+            return false;
+        }
+
+        pawn = playerPawn;
+        return true;
     }
 
     private bool TryCreateDefinition(

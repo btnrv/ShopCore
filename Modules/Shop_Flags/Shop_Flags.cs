@@ -141,6 +141,7 @@ public class Shop_Flags : BasePlugin
         shopApi.OnItemToggled += OnItemToggled;
         shopApi.OnItemSold += OnItemSold;
         shopApi.OnItemExpired += OnItemExpired;
+        shopApi.OnItemPreview += OnItemPreview;
         handlersRegistered = true;
 
         RunOnMainThread(SyncAllOnlinePlayers);
@@ -163,6 +164,7 @@ public class Shop_Flags : BasePlugin
         shopApi.OnItemToggled -= OnItemToggled;
         shopApi.OnItemSold -= OnItemSold;
         shopApi.OnItemExpired -= OnItemExpired;
+        shopApi.OnItemPreview -= OnItemPreview;
 
         foreach (var itemId in registeredItemIds)
         {
@@ -241,6 +243,31 @@ public class Shop_Flags : BasePlugin
         }
 
         RunOnMainThread(() => SyncPlayerPermissions(player));
+    }
+
+    private void OnItemPreview(IPlayer player, ShopItemDefinition item)
+    {
+        if (!registeredItemIds.Contains(item.Id))
+        {
+            return;
+        }
+
+        if (!itemRuntimeById.TryGetValue(item.Id, out var runtime))
+        {
+            return;
+        }
+
+        RunOnMainThread(() =>
+        {
+            if (!player.IsValid || player.IsFakeClient)
+            {
+                return;
+            }
+
+            player.SendChat(
+                $"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.flags.preview.info", item.DisplayName, runtime.GrantedPermission]}"
+            );
+        });
     }
 
     private void OnClientConnected(IOnClientConnectedEvent @event)

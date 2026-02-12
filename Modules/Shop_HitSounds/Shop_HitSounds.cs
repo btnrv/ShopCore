@@ -158,6 +158,7 @@ public class Shop_HitSounds : BasePlugin
         shopApi.OnItemToggled += OnItemToggled;
         shopApi.OnItemSold += OnItemSold;
         shopApi.OnItemExpired += OnItemExpired;
+        shopApi.OnItemPreview += OnItemPreview;
         handlersRegistered = true;
 
         Core.Logger.LogInformation(
@@ -177,6 +178,7 @@ public class Shop_HitSounds : BasePlugin
         shopApi.OnItemToggled -= OnItemToggled;
         shopApi.OnItemSold -= OnItemSold;
         shopApi.OnItemExpired -= OnItemExpired;
+        shopApi.OnItemPreview -= OnItemPreview;
 
         foreach (var itemId in registeredItemIds)
         {
@@ -274,6 +276,22 @@ public class Shop_HitSounds : BasePlugin
         }
     }
 
+    private void OnItemPreview(IPlayer player, ShopItemDefinition item)
+    {
+        if (!registeredItemIds.Contains(item.Id))
+        {
+            return;
+        }
+
+        if (!itemRuntimeById.TryGetValue(item.Id, out var runtime))
+        {
+            return;
+        }
+
+        PlayHitSound(player, runtime.SoundPath);
+        SendPreviewMessage(player, "module.hitsounds.preview.played", item.DisplayName);
+    }
+
     private bool TryGetEnabledSound(IPlayer player, out string soundPath)
     {
         soundPath = string.Empty;
@@ -332,6 +350,19 @@ public class Shop_HitSounds : BasePlugin
             {
                 Core.Logger.LogWarning(ex, "Shop_HitSounds main-thread action failed.");
             }
+        });
+    }
+
+    private void SendPreviewMessage(IPlayer player, string key, params object[] args)
+    {
+        RunOnMainThread(() =>
+        {
+            if (!player.IsValid || player.IsFakeClient)
+            {
+                return;
+            }
+
+            player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer[key, args]}");
         });
     }
 
