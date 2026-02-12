@@ -1,0 +1,9 @@
+{
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "reward.kill": "You got [lime]{0}[default] credits for a kill.",
+    "reward.headshot": "You got [lime]{0}[default] credits for a headshot.",
+    "reward.assist": "You got [lime]{0}[default] credits for an assist.",
+    "reward.mvp": "You got [lime]{0}[default] credits for being the mvp.",
+    "reward.round_won": "You got [lime]{0}[default] credits for winning the round.",
+    "reward.match_won": "You got [lime]{0}[default] credits for winning the match."
+}
