@@ -124,6 +124,7 @@ public sealed class ShopBeforeToggleContext : ShopBeforeActionContext
 /// <param name="Team">Team restriction.</param>
 /// <param name="Enabled">Global availability flag.</param>
 /// <param name="CanBeSold">Whether selling this item is allowed.</param>
+/// <param name="AllowPreview">Whether preview action should appear in buy item menu.</param>
 public sealed record ShopItemDefinition(
     string Id,
     string DisplayName,
@@ -134,7 +135,8 @@ public sealed record ShopItemDefinition(
     ShopItemType Type,
     ShopItemTeam Team,
     bool Enabled = true,
-    bool CanBeSold = true
+    bool CanBeSold = true,
+    bool AllowPreview = true
 );
 /// <summary>
 /// Unified transaction result for buy/sell operations.
@@ -174,7 +176,6 @@ public interface IShopCoreApiV1
     /// Wallet kind used by the shop economy.
     /// </summary>
     string WalletKind { get; }
-
     /// <summary>
     /// Fired before purchase processing. Handlers can block this operation.
     /// </summary>
@@ -216,6 +217,12 @@ public interface IShopCoreApiV1
     /// Fired when a timed item expires for a player.
     /// </summary>
     event Action<IPlayer, ShopItemDefinition>? OnItemExpired;
+
+    /// <summary>
+    /// Fired when a player requests a preview for an item from the buy menu.
+    /// Modules can subscribe and implement custom preview behavior.
+    /// </summary>
+    event Action<IPlayer, ShopItemDefinition>? OnItemPreview;
 
     /// <summary>
     /// Fired when a ledger entry is recorded.
@@ -303,6 +310,12 @@ public interface IShopCoreApiV1
     ShopTransactionResult PurchaseItem(IPlayer player, string itemId);
 
     /// <summary>
+    /// Requests a preview action for an item for a player.
+    /// Returns true when at least one preview handler ran.
+    /// </summary>
+    bool PreviewItem(IPlayer player, string itemId);
+
+    /// <summary>
     /// Sells an owned item for a player.
     /// </summary>
     ShopTransactionResult SellItem(IPlayer player, string itemId);
@@ -332,5 +345,3 @@ public interface IShopCoreApiV1
     /// </summary>
     IReadOnlyCollection<ShopLedgerEntry> GetRecentLedgerEntriesForPlayer(IPlayer player, int maxEntries = 50);
 }
-
-

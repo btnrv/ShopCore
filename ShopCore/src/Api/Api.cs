@@ -47,6 +47,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
     public event Action<IPlayer, ShopItemDefinition, decimal>? OnItemSold;
     public event Action<IPlayer, ShopItemDefinition, bool>? OnItemToggled;
     public event Action<IPlayer, ShopItemDefinition>? OnItemExpired;
+    public event Action<IPlayer, ShopItemDefinition>? OnItemPreview;
     public event Action<ShopLedgerEntry>? OnLedgerEntryRecorded;
 
     internal void ConfigureLedgerStore(LedgerConfig config, string pluginDataDirectory)
@@ -635,6 +636,66 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             CreditsDelta: -buyAmount,
             ExpiresAtUnixSeconds: expiresAt
         );
+    }
+
+    public bool PreviewItem(IPlayer player, string itemId)
+    {
+        if (player is null || !player.IsValid || string.IsNullOrWhiteSpace(itemId))
+        {
+            return false;
+        }
+
+        if (!TryGetItem(itemId, out var item))
+        {
+            plugin.SendLocalizedChat(player, "shop.error.item_not_found", itemId);
+            return false;
+        }
+
+        if (!item.Enabled)
+        {
+            plugin.SendLocalizedChat(player, "shop.error.item_disabled", item.DisplayName);
+            return false;
+        }
+
+        if (!IsTeamAllowed(player, item.Team))
+        {
+            plugin.SendLocalizedChat(player, "shop.error.team_not_allowed", item.DisplayName);
+            return false;
+        }
+
+        if (!item.AllowPreview)
+        {
+            return false;
+        }
+
+        var handlers = OnItemPreview;
+        if (handlers is null)
+        {
+            plugin.SendLocalizedChat(player, "shop.preview.unavailable", item.DisplayName);
+            return false;
+        }
+
+        var invoked = false;
+        foreach (Action<IPlayer, ShopItemDefinition> handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(player, item);
+                invoked = true;
+            }
+            catch (Exception ex)
+            {
+                plugin.LogWarning(ex, "OnItemPreview hook failed for item '{ItemId}'.", item.Id);
+            }
+        }
+
+        if (!invoked)
+        {
+            plugin.SendLocalizedChat(player, "shop.preview.unavailable", item.DisplayName);
+            return false;
+        }
+
+        return true;
     }
 
     public ShopTransactionResult SellItem(IPlayer player, string itemId)
