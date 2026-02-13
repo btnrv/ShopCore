@@ -125,6 +125,7 @@ public sealed class ShopBeforeToggleContext : ShopBeforeActionContext
 /// <param name="Enabled">Global availability flag.</param>
 /// <param name="CanBeSold">Whether selling this item is allowed.</param>
 /// <param name="AllowPreview">Whether preview action should appear in buy item menu.</param>
+/// <param name="IsEquipable">Whether item should be owned/equipped. Set to false for one-time buy items.</param>
 public sealed record ShopItemDefinition(
     string Id,
     string DisplayName,
@@ -136,7 +137,8 @@ public sealed record ShopItemDefinition(
     ShopItemTeam Team,
     bool Enabled = true,
     bool CanBeSold = true,
-    bool AllowPreview = true
+    bool AllowPreview = true,
+    bool IsEquipable = true
 );
 /// <summary>
 /// Unified transaction result for buy/sell operations.

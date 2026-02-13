@@ -198,11 +198,10 @@ public class Shop_Flags : BasePlugin
             return;
         }
 
-        context.BlockLocalized(
-            "module.flags.error.permission",
-            context.Item.DisplayName,
-            runtime.RequiredPermission
-        );
+        var player = context.Player;
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        var prefix = loc["shop.prefix"];
+        context.Block($"{prefix} {loc["module.flags.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemPurchased(IPlayer player, ShopItemDefinition item)

@@ -28,6 +28,7 @@ public class Shop_PlayerModels : BasePlugin
     private const string DefaultCategory = "Visuals/Player Models";
     private const float PreviewDurationSeconds = 8f;
     private const float PreviewDistance = 75f;
+    private const float PreviewRotateIntervalSeconds = 0.05f;
 
     private IShopCoreApiV1? shopApi;
     private bool handlersRegistered;
@@ -114,7 +115,16 @@ public class Shop_PlayerModels : BasePlugin
             return HookResult.Continue;
         }
 
-        ApplyConfiguredOrDefaultModel(player);
+        Core.Scheduler.NextWorldUpdate(() =>
+        {
+            if (player is null || !player.IsValid || player.IsFakeClient)
+            {
+                return;
+            }
+
+            ApplyConfiguredOrDefaultModel(player);
+        });
+
         return HookResult.Continue;
     }
 
@@ -257,11 +267,10 @@ public class Shop_PlayerModels : BasePlugin
             return;
         }
 
-        context.BlockLocalized(
-            "module.player_models.error.permission",
-            context.Item.DisplayName,
-            runtime.RequiredPermission
-        );
+        var player = context.Player;
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        var prefix = loc["shop.prefix"];
+        context.Block($"{prefix} {loc["module.player_models.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -454,6 +463,8 @@ public class Shop_PlayerModels : BasePlugin
                     origin.Y + (MathF.Sin(yawRadians) * PreviewDistance),
                     origin.Z
                 );
+                var initialYaw = NormalizeYaw(rotation.Y + 180f);
+                var previewRotation = new QAngle(rotation.X, initialYaw, rotation.Z);
 
                 preview = Core.EntitySystem.CreateEntityByDesignerName<CDynamicProp>("prop_dynamic_override");
                 if (preview is null || !preview.IsValid)
@@ -461,9 +472,17 @@ public class Shop_PlayerModels : BasePlugin
                     return;
                 }
 
-                preview.Teleport(previewPosition, rotation, Vector.Zero);
+                // Keep preview model facing player by default; optional full-spin is controlled by config.
+                preview.Teleport(previewPosition, previewRotation, Vector.Zero);
                 preview.DispatchSpawn();
                 preview.SetModel(modelPath);
+                ConfigurePreviewVisibility(preview, player);
+                ConfigurePreviewGlow(preview);
+
+                if (runtimeSettings.RotatePreviewModel)
+                {
+                    RotatePreviewModel(preview, previewPosition, previewRotation);
+                }
 
                 player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.player_models.preview.started", displayName, (int)PreviewDurationSeconds]}");
             }
@@ -491,6 +510,112 @@ public class Shop_PlayerModels : BasePlugin
                 });
             });
         });
+    }
+
+    private void ConfigurePreviewVisibility(CDynamicProp preview, IPlayer previewOwner)
+    {
+        if (preview is null || !preview.IsValid || previewOwner is null || !previewOwner.IsValid)
+        {
+            return;
+        }
+
+        if (previewOwner.PlayerID < 0)
+        {
+            return;
+        }
+
+        try
+        {
+            // Hide for everyone, then explicitly allow only the preview owner.
+            preview.SetTransmitState(false);
+            preview.SetTransmitState(true, previewOwner.PlayerID);
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.LogWarning(ex, "Failed to configure preview visibility for player {PlayerId}.", previewOwner.PlayerID);
+        }
+    }
+
+    private void ConfigurePreviewGlow(CDynamicProp preview)
+    {
+        if (preview is null || !preview.IsValid)
+        {
+            return;
+        }
+
+        try
+        {
+            // Dynamic prop glow properties.
+            preview.InitialGlowState = 1;
+            preview.GlowRangeMin = 0;
+            preview.GlowRange = 2048;
+            preview.GlowTeam = -1;
+            preview.GlowColor = new Color(255, 180, 40, 255);
+
+            // Base model glow properties.
+            var glow = preview.Glow;
+            glow.GlowType = 3;
+            glow.GlowTeam = -1;
+            glow.GlowRangeMin = 0;
+            glow.GlowRange = 2048;
+            glow.GlowColorOverride = new Color(255, 180, 40, 255);
+            glow.GlowColorOverrideUpdated();
+            glow.GlowTypeUpdated();
+            glow.GlowTeamUpdated();
+            glow.GlowRangeMinUpdated();
+            glow.GlowRangeUpdated();
+
+            glow.EligibleForScreenHighlight = true;
+            glow.EligibleForScreenHighlightUpdated();
+            glow.Glowing = true;
+            preview.GlowUpdated();
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.LogWarning(ex, "Failed to configure glow on preview model entity.");
+        }
+    }
+
+    private void RotatePreviewModel(CDynamicProp preview, Vector origin, QAngle initialRotation)
+    {
+        var steps = (int)MathF.Ceiling(PreviewDurationSeconds / PreviewRotateIntervalSeconds);
+        if (steps <= 0)
+        {
+            return;
+        }
+
+        for (var step = 1; step <= steps; step++)
+        {
+            var currentStep = step;
+            var progress = currentStep / (float)steps;
+            var targetYaw = NormalizeYaw(initialRotation.Y + (360f * progress));
+
+            Core.Scheduler.DelayBySeconds(currentStep * PreviewRotateIntervalSeconds, () =>
+            {
+                Core.Scheduler.NextWorldUpdate(() =>
+                {
+                    if (preview is null || !preview.IsValid)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        preview.Teleport(origin, new QAngle(initialRotation.X, targetYaw, initialRotation.Z), Vector.Zero);
+                    }
+                    catch (Exception ex)
+                    {
+                        Core.Logger.LogWarning(ex, "Failed rotating preview player model entity.");
+                    }
+                });
+            });
+        }
+    }
+
+    private static float NormalizeYaw(float yaw)
+    {
+        var normalized = yaw % 360f;
+        return normalized < 0f ? normalized + 360f : normalized;
     }
 
     private static bool TryGetAlivePawn(IPlayer player, out CCSPlayerPawn pawn)
@@ -686,7 +811,8 @@ public class Shop_PlayerModels : BasePlugin
             {
                 Category = DefaultCategory,
                 DefaultTModel = "characters/models/tm_phoenix/tm_phoenix.vmdl",
-                DefaultCtModel = "characters/models/ctm_sas/ctm_sas.vmdl"
+                DefaultCtModel = "characters/models/ctm_sas/ctm_sas.vmdl",
+                RotatePreviewModel = true
             },
             Items =
             [
@@ -740,6 +866,7 @@ internal sealed class PlayerModelsModuleSettings
     public string Category { get; set; } = "Visuals/Player Models";
     public string DefaultTModel { get; set; } = "characters/models/tm_phoenix/tm_phoenix.vmdl";
     public string DefaultCtModel { get; set; } = "characters/models/ctm_sas/ctm_sas.vmdl";
+    public bool RotatePreviewModel { get; set; } = true;
 }
 
 internal sealed class PlayerModelItemTemplate
@@ -758,4 +885,3 @@ internal sealed class PlayerModelItemTemplate
     public bool CanBeSold { get; set; } = true;
     public string RequiredPermission { get; set; } = string.Empty;
 }
-
