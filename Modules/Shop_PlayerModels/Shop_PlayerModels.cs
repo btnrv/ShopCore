@@ -36,6 +36,7 @@ public class Shop_PlayerModels : BasePlugin
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> registeredItemOrder = new();
     private readonly Dictionary<string, PlayerModelItemRuntime> itemRuntimeById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, uint> previewEntityByPlayerId = new();
 
     private PlayerModelsModuleSettings runtimeSettings = new();
 
@@ -242,6 +243,7 @@ public class Shop_PlayerModels : BasePlugin
         registeredItemIds.Clear();
         registeredItemOrder.Clear();
         itemRuntimeById.Clear();
+        ClearAllPreviewEntities();
         handlersRegistered = false;
     }
 
@@ -452,6 +454,8 @@ public class Shop_PlayerModels : BasePlugin
                 return;
             }
 
+            DespawnPreviewForPlayer(player.PlayerID);
+
             CDynamicProp? preview = null;
             try
             {
@@ -478,6 +482,7 @@ public class Shop_PlayerModels : BasePlugin
                 preview.SetModel(modelPath);
                 ConfigurePreviewVisibility(preview, player);
                 ConfigurePreviewGlow(preview);
+                previewEntityByPlayerId[player.PlayerID] = preview.Index;
 
                 if (runtimeSettings.RotatePreviewModel)
                 {
@@ -507,9 +512,59 @@ public class Shop_PlayerModels : BasePlugin
                     {
                         Core.Logger.LogWarning(ex, "Failed to despawn player model preview.");
                     }
+                    finally
+                    {
+                        if (player is not null && player.IsValid)
+                        {
+                            if (previewEntityByPlayerId.TryGetValue(player.PlayerID, out var trackedIndex) &&
+                                preview is not null &&
+                                trackedIndex == preview.Index)
+                            {
+                                previewEntityByPlayerId.Remove(player.PlayerID);
+                            }
+                        }
+                    }
                 });
             });
         });
+    }
+
+    private void DespawnPreviewForPlayer(int playerId)
+    {
+        if (playerId < 0)
+        {
+            return;
+        }
+
+        if (!previewEntityByPlayerId.TryGetValue(playerId, out var entityIndex))
+        {
+            return;
+        }
+
+        try
+        {
+            var existing = Core.EntitySystem.GetEntityByIndex<CDynamicProp>(entityIndex);
+            if (existing is not null && existing.IsValid)
+            {
+                existing.Despawn();
+            }
+        }
+        catch (Exception ex)
+        {
+            Core.Logger.LogWarning(ex, "Failed to despawn existing preview entity for player {PlayerId}.", playerId);
+        }
+        finally
+        {
+            previewEntityByPlayerId.Remove(playerId);
+        }
+    }
+
+    private void ClearAllPreviewEntities()
+    {
+        foreach (var playerId in previewEntityByPlayerId.Keys.ToArray())
+        {
+            DespawnPreviewForPlayer(playerId);
+        }
     }
 
     private void ConfigurePreviewVisibility(CDynamicProp preview, IPlayer previewOwner)
