@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+      - "v*.*.*-*"
   workflow_dispatch:
     inputs:
       version:
@@ -41,8 +42,15 @@ jobs:
             RAW="${TAG#v}"
           fi
 
+          if [[ "${RAW}" == *"-"* ]]; then
+            PRERELEASE="true"
+          else
+            PRERELEASE="false"
+          fi
+
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${RAW}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
 
       - name: Ensure Tag Exists (manual run)
         if: github.event_name == 'workflow_dispatch'
@@ -174,6 +182,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ShopCore v${{ steps.version.outputs.version }}
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
           body_path: release_notes.md
           files: |
             ${{ steps.archive.outputs.core_archive }}
