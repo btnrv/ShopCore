@@ -8,6 +8,8 @@ namespace ShopCore;
 
 public partial class ShopCore
 {
+    private readonly record struct InventoryItemSnapshot(ShopItemDefinition Item, long? ExpireAtUnixSeconds);
+
     private void HandleOpenShopMenuCommand(ICommandContext context)
     {
         if (context.Sender is not IPlayer player || !player.IsValid)
@@ -247,12 +249,10 @@ public partial class ShopCore
     private IMenuAPI BuildInventoryCategoryMenu(IPlayer player, IMenuAPI? parent = null)
     {
         var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.title", parent);
-        var inventoryItems = shopApi.GetItems()
-            .Where(item => shopApi.IsItemOwned(player, item.Id))
-            .ToArray();
+        var inventorySnapshot = BuildInventorySnapshot(player);
 
-        var grouped = inventoryItems
-            .GroupBy(item => ParseCategoryPath(item.Category).Category, StringComparer.OrdinalIgnoreCase)
+        var grouped = inventorySnapshot
+            .GroupBy(entry => ParseCategoryPath(entry.Item.Category).Category, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -270,7 +270,7 @@ public partial class ShopCore
             categoryButton.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventorySubcategoryOrItemsMenu(args.Player, category, parentMenu));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventorySubcategoryOrItemsMenu(args.Player, category, inventorySnapshot, parentMenu));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(categoryButton);
@@ -279,11 +279,15 @@ public partial class ShopCore
         return builder.Build();
     }
 
-    private IMenuAPI BuildInventorySubcategoryOrItemsMenu(IPlayer player, string category, IMenuAPI? parent = null)
+    private IMenuAPI BuildInventorySubcategoryOrItemsMenu(
+        IPlayer player,
+        string category,
+        IReadOnlyCollection<InventoryItemSnapshot>? inventorySnapshot = null,
+        IMenuAPI? parent = null)
     {
-        var items = shopApi.GetItems()
-            .Where(item => shopApi.IsItemOwned(player, item.Id))
-            .Where(item => CategoryMatches(item, category, null))
+        var snapshot = inventorySnapshot ?? BuildInventorySnapshot(player);
+        var items = snapshot
+            .Where(entry => CategoryMatches(entry.Item, category, null))
             .ToArray();
 
         if (items.Length == 0)
@@ -294,14 +298,14 @@ public partial class ShopCore
         }
 
         var grouped = items
-            .GroupBy(item => ParseCategoryPath(item.Category).Subcategory ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(entry => ParseCategoryPath(entry.Item.Category).Subcategory ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         var hasSubcategories = grouped.Any(group => !string.IsNullOrWhiteSpace(group.Key));
         if (!hasSubcategories)
         {
-            return BuildInventoryItemsMenu(player, category, null, parent);
+            return BuildInventoryItemsMenu(player, category, null, snapshot, parent);
         }
 
         var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, category);
@@ -314,7 +318,7 @@ public partial class ShopCore
             button.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, subcategory, parentMenu));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, subcategory, snapshot, parentMenu));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(button);
@@ -323,14 +327,19 @@ public partial class ShopCore
         return builder.Build();
     }
 
-    private IMenuAPI BuildInventoryItemsMenu(IPlayer player, string category, string? subcategory = null, IMenuAPI? parent = null)
+    private IMenuAPI BuildInventoryItemsMenu(
+        IPlayer player,
+        string category,
+        string? subcategory = null,
+        IReadOnlyCollection<InventoryItemSnapshot>? inventorySnapshot = null,
+        IMenuAPI? parent = null)
     {
         var categoryPathText = BuildCategoryPathText(category, subcategory);
         var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, categoryPathText);
-        var items = shopApi.GetItems()
-            .Where(item => shopApi.IsItemOwned(player, item.Id))
-            .Where(item => CategoryMatches(item, category, subcategory))
-            .OrderBy(item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
+        var snapshot = inventorySnapshot ?? BuildInventorySnapshot(player);
+        var items = snapshot
+            .Where(entry => CategoryMatches(entry.Item, category, subcategory))
+            .OrderBy(entry => entry.Item.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         if (items.Length == 0)
@@ -339,10 +348,11 @@ public partial class ShopCore
             return builder.Build();
         }
 
-        foreach (var item in items)
+        foreach (var entry in items)
         {
+            var item = entry.Item;
             var button = new ButtonMenuOption(BuildInventoryItemText(player, item));
-            button.Comment = BuildInventoryItemComment(player, item);
+            button.Comment = BuildInventoryItemComment(player, item, entry.ExpireAtUnixSeconds);
             button.BeforeFormat += (sender, args) =>
             {
                 args.CustomText = BuildInventoryItemText(args.Player, item);
@@ -367,41 +377,33 @@ public partial class ShopCore
         IMenuAPI? parent = null)
     {
         var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.item.title", parent, item.DisplayName);
+        var isEnabled = item.IsEquipable && shopApi.IsItemEnabled(player, item.Id);
+        var expireAt = item.Duration.HasValue ? shopApi.GetItemExpireAt(player, item.Id) : null;
 
-        var infoOption = new TextMenuOption(BuildInventoryItemInfoText(player, item))
+        var infoOption = new TextMenuOption(BuildInventoryItemInfoText(player, isEnabled))
         {
             Enabled = false
         };
-        infoOption.BeforeFormat += (sender, args) =>
-        {
-            args.CustomText = BuildInventoryItemInfoText(args.Player, item);
-        };
         _ = builder.AddOption(infoOption);
 
-        var durationInfoOption = new TextMenuOption(BuildInventoryItemDurationInfoText(player, item))
+        var durationInfoOption = new TextMenuOption(BuildInventoryItemDurationInfoText(player, item, expireAt))
         {
             Enabled = false
         };
         durationInfoOption.BeforeFormat += (sender, args) =>
         {
-            args.CustomText = BuildInventoryItemDurationInfoText(args.Player, item);
+            args.CustomText = BuildInventoryItemDurationInfoText(args.Player, item, expireAt);
         };
         _ = builder.AddOption(durationInfoOption);
 
         var toggleButton = new ButtonMenuOption(
-            shopApi.IsItemEnabled(player, item.Id)
+            isEnabled
                 ? Localize(player, "shop.menu.inventory.item.toggle.disable")
                 : Localize(player, "shop.menu.inventory.item.toggle.enable")
         );
-        toggleButton.BeforeFormat += (sender, args) =>
-        {
-            args.CustomText = shopApi.IsItemEnabled(args.Player, item.Id)
-                ? Localize(args.Player, "shop.menu.inventory.item.toggle.disable")
-                : Localize(args.Player, "shop.menu.inventory.item.toggle.enable");
-        };
         toggleButton.Click += (sender, args) =>
         {
-            var nextEnabled = !shopApi.IsItemEnabled(args.Player, item.Id);
+            var nextEnabled = !isEnabled;
             _ = shopApi.SetItemEnabled(args.Player, item.Id, nextEnabled);
             var parentMenu = (sender as IMenuOption)?.Menu;
             Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemActionMenu(args.Player, item, category, subcategory, parentMenu));
@@ -416,7 +418,7 @@ public partial class ShopCore
             sellButton.Click += (sender, args) =>
             {
                 _ = shopApi.SellItem(args.Player, item.Id);
-                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, subcategory, parent));
+                Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryItemsMenu(args.Player, category, subcategory, null, parent));
                 return ValueTask.CompletedTask;
             };
             _ = builder.AddOption(sellButton);
@@ -475,42 +477,69 @@ public partial class ShopCore
 
     private string BuildInventoryItemComment(IPlayer player, ShopItemDefinition item)
     {
-        return Localize(player, "shop.menu.inventory.item.comment", GetCurrentDurationText(player, item));
+        return BuildInventoryItemComment(player, item, null);
     }
 
-    private string BuildInventoryItemInfoText(IPlayer player, ShopItemDefinition item)
+    private string BuildInventoryItemComment(IPlayer player, ShopItemDefinition item, long? expireAtUnixSeconds)
     {
-        var stateText = shopApi.IsItemEnabled(player, item.Id)
+        return Localize(player, "shop.menu.inventory.item.comment", GetCurrentDurationText(player, item, expireAtUnixSeconds));
+    }
+
+    private string BuildInventoryItemInfoText(IPlayer player, bool enabled)
+    {
+        var stateText = enabled
             ? Localize(player, "shop.menu.item.state.enabled")
             : Localize(player, "shop.menu.item.state.disabled");
         return Localize(player, "shop.menu.inventory.item.info", stateText);
     }
 
-    private string BuildInventoryItemDurationInfoText(IPlayer player, ShopItemDefinition item)
+    private string BuildInventoryItemDurationInfoText(IPlayer player, ShopItemDefinition item, long? expireAtUnixSeconds)
     {
-        return Localize(player, "shop.menu.inventory.item.duration_info", GetCurrentDurationText(player, item));
+        return Localize(player, "shop.menu.inventory.item.duration_info", GetCurrentDurationText(player, item, expireAtUnixSeconds));
     }
 
     private string GetCurrentDurationText(IPlayer player, ShopItemDefinition item)
+    {
+        var expireAt = item.Duration.HasValue ? shopApi.GetItemExpireAt(player, item.Id) : null;
+        return GetCurrentDurationText(player, item, expireAt);
+    }
+
+    private string GetCurrentDurationText(IPlayer player, ShopItemDefinition item, long? expireAtUnixSeconds)
     {
         if (!item.Duration.HasValue)
         {
             return Localize(player, "shop.menu.item.duration.permanent");
         }
 
-        var expireAt = shopApi.GetItemExpireAt(player, item.Id);
-        if (!expireAt.HasValue)
+        if (!expireAtUnixSeconds.HasValue)
         {
             return FormatDurationWords((long)Math.Ceiling(item.Duration.Value.TotalSeconds));
         }
 
-        var remaining = expireAt.Value - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var remaining = expireAtUnixSeconds.Value - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         if (remaining <= 0)
         {
             return Localize(player, "shop.menu.item.expired");
         }
 
         return FormatDurationWords(remaining);
+    }
+
+    private IReadOnlyList<InventoryItemSnapshot> BuildInventorySnapshot(IPlayer player)
+    {
+        var snapshots = new List<InventoryItemSnapshot>();
+        foreach (var item in shopApi.GetItems())
+        {
+            if (!shopApi.IsItemOwned(player, item.Id))
+            {
+                continue;
+            }
+
+            var expireAt = item.Duration.HasValue ? shopApi.GetItemExpireAt(player, item.Id) : null;
+            snapshots.Add(new InventoryItemSnapshot(item, expireAt));
+        }
+
+        return snapshots;
     }
 
     private static string FormatDurationWords(long totalSeconds)

@@ -894,22 +894,6 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
     {
         if (!item.IsEquipable)
         {
-            var ownedKey = OwnedKey(item.Id);
-            var enabledKey = EnabledKey(item.Id);
-            var expireKey = ExpireAtKey(item.Id);
-
-            var hadOwned = plugin.playerCookies.GetOrDefault(player, ownedKey, false);
-            var hadEnabled = plugin.playerCookies.GetOrDefault(player, enabledKey, false);
-            var hadExpireAt = plugin.playerCookies.GetOrDefault(player, expireKey, 0L) > 0L;
-
-            if (hadOwned || hadEnabled || hadExpireAt)
-            {
-                plugin.playerCookies.Set(player, ownedKey, false);
-                plugin.playerCookies.Set(player, enabledKey, false);
-                plugin.playerCookies.Unset(player, expireKey);
-                plugin.playerCookies.Save(player);
-            }
-
             return false;
         }
 
