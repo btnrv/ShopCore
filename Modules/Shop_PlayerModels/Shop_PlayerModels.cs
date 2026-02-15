@@ -36,7 +36,9 @@ public class Shop_PlayerModels : BasePlugin
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> registeredItemOrder = new();
     private readonly Dictionary<string, PlayerModelItemRuntime> itemRuntimeById = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<int, uint> previewEntityByPlayerId = new();
+    private readonly object previewSync = new();
+    private readonly Dictionary<int, PlayerModelPreviewState> previewStateByPlayerId = new();
+    private long previewSessionCounter;
 
     private PlayerModelsModuleSettings runtimeSettings = new();
 
@@ -454,7 +456,12 @@ public class Shop_PlayerModels : BasePlugin
                 return;
             }
 
-            DespawnPreviewForPlayer(player.PlayerID);
+            var playerId = player.PlayerID;
+            var previewSession = ReservePreviewSession(playerId, out var previousPreviewEntityIndex);
+            if (previousPreviewEntityIndex != 0)
+            {
+                DespawnPreviewEntityByIndex(previousPreviewEntityIndex);
+            }
 
             CDynamicProp? preview = null;
             try
@@ -482,11 +489,11 @@ public class Shop_PlayerModels : BasePlugin
                 preview.SetModel(modelPath);
                 ConfigurePreviewVisibility(preview, player);
                 ConfigurePreviewGlow(preview);
-                previewEntityByPlayerId[player.PlayerID] = preview.Index;
+                SetPreviewEntityIndex(playerId, previewSession, preview.Index);
 
                 if (runtimeSettings.RotatePreviewModel)
                 {
-                    RotatePreviewModel(preview, previewPosition, previewRotation);
+                    RotatePreviewModel(playerId, previewSession, preview, previewPosition, previewRotation);
                 }
 
                 player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.player_models.preview.started", displayName, (int)PreviewDurationSeconds]}");
@@ -494,6 +501,7 @@ public class Shop_PlayerModels : BasePlugin
             catch (Exception ex)
             {
                 Core.Logger.LogWarning(ex, "Failed to spawn player model preview for '{DisplayName}'.", displayName);
+                ClearPreviewSessionIfCurrent(playerId, previewSession);
                 return;
             }
 
@@ -501,6 +509,11 @@ public class Shop_PlayerModels : BasePlugin
             {
                 Core.Scheduler.NextWorldUpdate(() =>
                 {
+                    if (!IsCurrentPreviewSession(playerId, previewSession))
+                    {
+                        return;
+                    }
+
                     try
                     {
                         if (preview is not null && preview.IsValid)
@@ -514,29 +527,65 @@ public class Shop_PlayerModels : BasePlugin
                     }
                     finally
                     {
-                        if (player is not null && player.IsValid)
-                        {
-                            if (previewEntityByPlayerId.TryGetValue(player.PlayerID, out var trackedIndex) &&
-                                preview is not null &&
-                                trackedIndex == preview.Index)
-                            {
-                                previewEntityByPlayerId.Remove(player.PlayerID);
-                            }
-                        }
+                        ClearPreviewSessionIfCurrent(playerId, previewSession);
                     }
                 });
             });
         });
     }
 
-    private void DespawnPreviewForPlayer(int playerId)
+    private long ReservePreviewSession(int playerId, out uint previousEntityIndex)
     {
-        if (playerId < 0)
+        lock (previewSync)
         {
-            return;
-        }
+            previousEntityIndex = 0;
+            if (previewStateByPlayerId.TryGetValue(playerId, out var previousState))
+            {
+                previousEntityIndex = previousState.EntityIndex;
+            }
 
-        if (!previewEntityByPlayerId.TryGetValue(playerId, out var entityIndex))
+            previewSessionCounter++;
+            var session = previewSessionCounter;
+            previewStateByPlayerId[playerId] = new PlayerModelPreviewState(session, 0);
+            return session;
+        }
+    }
+
+    private void SetPreviewEntityIndex(int playerId, long sessionId, uint entityIndex)
+    {
+        lock (previewSync)
+        {
+            if (!previewStateByPlayerId.TryGetValue(playerId, out var state) || state.SessionId != sessionId)
+            {
+                return;
+            }
+
+            previewStateByPlayerId[playerId] = state with { EntityIndex = entityIndex };
+        }
+    }
+
+    private bool IsCurrentPreviewSession(int playerId, long sessionId)
+    {
+        lock (previewSync)
+        {
+            return previewStateByPlayerId.TryGetValue(playerId, out var state) && state.SessionId == sessionId;
+        }
+    }
+
+    private void ClearPreviewSessionIfCurrent(int playerId, long sessionId)
+    {
+        lock (previewSync)
+        {
+            if (previewStateByPlayerId.TryGetValue(playerId, out var state) && state.SessionId == sessionId)
+            {
+                previewStateByPlayerId.Remove(playerId);
+            }
+        }
+    }
+
+    private void DespawnPreviewEntityByIndex(uint entityIndex)
+    {
+        if (entityIndex == 0)
         {
             return;
         }
@@ -551,19 +600,25 @@ public class Shop_PlayerModels : BasePlugin
         }
         catch (Exception ex)
         {
-            Core.Logger.LogWarning(ex, "Failed to despawn existing preview entity for player {PlayerId}.", playerId);
-        }
-        finally
-        {
-            previewEntityByPlayerId.Remove(playerId);
+            Core.Logger.LogWarning(ex, "Failed to despawn existing preview entity index {EntityIndex}.", entityIndex);
         }
     }
 
     private void ClearAllPreviewEntities()
     {
-        foreach (var playerId in previewEntityByPlayerId.Keys.ToArray())
+        uint[] entityIndexes;
+        lock (previewSync)
         {
-            DespawnPreviewForPlayer(playerId);
+            entityIndexes = previewStateByPlayerId.Values
+                .Select(static state => state.EntityIndex)
+                .Where(static index => index != 0)
+                .ToArray();
+            previewStateByPlayerId.Clear();
+        }
+
+        foreach (var entityIndex in entityIndexes)
+        {
+            DespawnPreviewEntityByIndex(entityIndex);
         }
     }
 
@@ -631,7 +686,7 @@ public class Shop_PlayerModels : BasePlugin
         }
     }
 
-    private void RotatePreviewModel(CDynamicProp preview, Vector origin, QAngle initialRotation)
+    private void RotatePreviewModel(int playerId, long previewSession, CDynamicProp preview, Vector origin, QAngle initialRotation)
     {
         var steps = (int)MathF.Ceiling(PreviewDurationSeconds / PreviewRotateIntervalSeconds);
         if (steps <= 0)
@@ -649,6 +704,11 @@ public class Shop_PlayerModels : BasePlugin
             {
                 Core.Scheduler.NextWorldUpdate(() =>
                 {
+                    if (!IsCurrentPreviewSession(playerId, previewSession))
+                    {
+                        return;
+                    }
+
                     if (preview is null || !preview.IsValid)
                     {
                         return;
@@ -908,6 +968,11 @@ internal readonly record struct PlayerModelItemRuntime(
     string ItemId,
     string ModelPath,
     string RequiredPermission
+);
+
+internal readonly record struct PlayerModelPreviewState(
+    long SessionId,
+    uint EntityIndex
 );
 
 internal sealed class PlayerModelsModuleConfig
