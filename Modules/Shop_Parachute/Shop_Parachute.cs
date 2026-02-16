@@ -21,7 +21,7 @@ namespace ShopCore;
 )]
 public class Shop_Parachute : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Parachute";
     private const string TemplateFileName = "parachute_config.jsonc";
     private const string TemplateSectionName = "Main";
@@ -38,7 +38,7 @@ public class Shop_Parachute : BasePlugin
         public bool SkipTick { get; set; } = true;
     }
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> registeredItemOrder = new();
@@ -46,6 +46,7 @@ public class Shop_Parachute : BasePlugin
     private readonly Dictionary<int, ParachutePreviewState> previewRuntimeByPlayerId = new();
     private readonly PlayerData?[] playerDataById = new PlayerData[MaxPlayers];
     private readonly Dictionary<int, float> nextPhysicsUpdateAtByPlayerId = new();
+    private ParachuteModuleSettings runtimeSettings = new();
 
     public Shop_Parachute(ISwiftlyCore core) : base(core) { }
 
@@ -60,7 +61,7 @@ public class Shop_Parachute : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -245,6 +246,7 @@ public class Shop_Parachute : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -254,6 +256,7 @@ public class Shop_Parachute : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -344,8 +347,7 @@ public class Shop_Parachute : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.parachute.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -422,10 +424,26 @@ public class Shop_Parachute : BasePlugin
                 return;
             }
 
+            var loc = Core.Translation.GetPlayerLocalizer(player);
             player.SendChat(
-                $"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.parachute.preview.started", item.DisplayName, (int)PreviewDurationSeconds]}"
+                $"{GetPrefix(player)} {loc["preview.started", item.DisplayName, (int)PreviewDurationSeconds]}"
             );
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private void ApplyParachutePhysics(IPlayer player, PlayerData data, ParachuteItemRuntime runtime, float currentTime)
@@ -875,7 +893,7 @@ public class Shop_Parachute : BasePlugin
                 new ParachuteItemTemplate
                 {
                     Id = "parachute_basic_hourly",
-                    DisplayNameKey = "module.parachute.item.basic.name",
+                    DisplayNameKey = "item.basic.name",
                     Price = 500,
                     SellPrice = 250,
                     DurationSeconds = 3600,
@@ -891,7 +909,7 @@ public class Shop_Parachute : BasePlugin
                 new ParachuteItemTemplate
                 {
                     Id = "parachute_premium_weekly",
-                    DisplayNameKey = "module.parachute.item.premium.name",
+                    DisplayNameKey = "item.premium.name",
                     Price = 1500,
                     SellPrice = 750,
                     DurationSeconds = 604800,
@@ -907,7 +925,7 @@ public class Shop_Parachute : BasePlugin
                 new ParachuteItemTemplate
                 {
                     Id = "parachute_permanent",
-                    DisplayNameKey = "module.parachute.item.permanent.name",
+                    DisplayNameKey = "item.permanent.name",
                     Price = 8000,
                     SellPrice = 4000,
                     DurationSeconds = 0,
@@ -944,6 +962,7 @@ internal sealed class ParachuteModuleConfig
 
 internal sealed class ParachuteModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Movement/Parachute";
     public float DefaultFallSpeed { get; set; } = 85f;
     public bool DefaultLinear { get; set; } = true;

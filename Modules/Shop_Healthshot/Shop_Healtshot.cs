@@ -19,19 +19,20 @@ namespace ShopCore;
 )]
 public class Shop_Healtshot : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Healthshot";
     private const string TemplateFileName = "healthshot_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Healings";
     private const string DefaultWeaponDesignerName = "weapon_healthshot";
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private string healthshotDesignerName = DefaultWeaponDesignerName;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> roundStartItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, HealthshotGrantMode> itemGrantModes = new(StringComparer.OrdinalIgnoreCase);
+    private HealthshotModuleSettings runtimeSettings = new();
 
     public Shop_Healtshot(ISwiftlyCore core) : base(core)
     {
@@ -48,7 +49,7 @@ public class Shop_Healtshot : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -109,6 +110,7 @@ public class Shop_Healtshot : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -122,6 +124,7 @@ public class Shop_Healtshot : BasePlugin
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
             healthshotDesignerName = moduleConfig.Settings.WeaponDesignerName;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -223,7 +226,7 @@ public class Shop_Healtshot : BasePlugin
 
         if (grantMode == HealthshotGrantMode.OnPurchase)
         {
-            SendPreviewMessage(player, "module.healthshot.preview.instant", item.DisplayName);
+            SendPreviewMessage(player, "preview.instant", item.DisplayName);
             return;
         }
 
@@ -231,7 +234,7 @@ public class Shop_Healtshot : BasePlugin
             ? FormatDuration((int)item.Duration.Value.TotalSeconds)
             : Core.Localizer["shop.menu.item.duration.permanent"];
 
-        SendPreviewMessage(player, "module.healthshot.preview.roundstart", item.DisplayName, durationText);
+        SendPreviewMessage(player, "preview.roundstart", item.DisplayName, durationText);
     }
 
     private void GiveRoundStartHealthshotsToAllPlayers()
@@ -397,8 +400,24 @@ public class Shop_Healtshot : BasePlugin
                 return;
             }
 
-            player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer[key, args]}");
+            var loc = Core.Translation.GetPlayerLocalizer(player);
+            player.SendChat($"{GetPrefix(player)} {loc[key, args]}");
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private static string FormatDuration(int totalSeconds)
@@ -451,7 +470,7 @@ public class Shop_Healtshot : BasePlugin
                 {
                     Id = "healthshot_instant",
                     DisplayName = "Healthshot (Instant)",
-                    DisplayNameKey = "module.healthshot.item.instant.name",
+                    DisplayNameKey = "item.instant.name",
                     Price = 150,
                     SellPrice = null,
                     DurationSeconds = 0,
@@ -465,7 +484,7 @@ public class Shop_Healtshot : BasePlugin
                 {
                     Id = "healthshot_hourly",
                     DisplayName = "Healthshot (1 Hour)",
-                    DisplayNameKey = "module.healthshot.item.hourly.name",
+                    DisplayNameKey = "item.hourly.name",
                     Price = 800,
                     SellPrice = 400,
                     DurationSeconds = 3600,
@@ -495,6 +514,7 @@ internal sealed class HealthshotModuleConfig
 
 internal sealed class HealthshotModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Healings";
     public string WeaponDesignerName { get; set; } = "weapon_healthshot";
 }

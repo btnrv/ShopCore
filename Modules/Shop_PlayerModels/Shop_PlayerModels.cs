@@ -21,7 +21,7 @@ namespace ShopCore;
 )]
 public class Shop_PlayerModels : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_PlayerModels";
     private const string TemplateFileName = "playermodels_config.jsonc";
     private const string TemplateSectionName = "Main";
@@ -30,7 +30,7 @@ public class Shop_PlayerModels : BasePlugin
     private const float PreviewDistance = 75f;
     private const float PreviewRotateIntervalSeconds = 0.05f;
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
 
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
@@ -57,7 +57,7 @@ public class Shop_PlayerModels : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -273,8 +273,7 @@ public class Shop_PlayerModels : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.player_models.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -496,7 +495,7 @@ public class Shop_PlayerModels : BasePlugin
                     RotatePreviewModel(playerId, previewSession, preview, previewPosition, previewRotation);
                 }
 
-                player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.player_models.preview.started", displayName, (int)PreviewDurationSeconds]}");
+                player.SendChat($"{GetPrefix(player)} {Core.Translation.GetPlayerLocalizer(player)["preview.started", displayName, (int)PreviewDurationSeconds]}");
             }
             catch (Exception ex)
             {
@@ -620,6 +619,21 @@ public class Shop_PlayerModels : BasePlugin
         {
             DespawnPreviewEntityByIndex(entityIndex);
         }
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private void ConfigurePreviewVisibility(CDynamicProp preview, IPlayer previewOwner)
@@ -935,7 +949,7 @@ public class Shop_PlayerModels : BasePlugin
                 {
                     Id = "model_frogman_hourly",
                     ModelName = "Frogman",
-                    DisplayNameKey = "module.player_models.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     ModelPath = "characters/models/ctm_diver/ctm_diver_variantb.vmdl",
                     Price = 3500,
                     SellPrice = 1750,
@@ -949,7 +963,7 @@ public class Shop_PlayerModels : BasePlugin
                 {
                     Id = "model_fbi_permanent",
                     ModelName = "FBI",
-                    DisplayNameKey = "module.player_models.item.permanent.name",
+                    DisplayNameKey = "item.permanent.name",
                     ModelPath = "characters/models/ctm_fbi/ctm_fbi_varianta.vmdl",
                     Price = 9000,
                     SellPrice = 4500,
@@ -983,6 +997,7 @@ internal sealed class PlayerModelsModuleConfig
 
 internal sealed class PlayerModelsModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Player Models";
     public string DefaultTModel { get; set; } = "characters/models/tm_phoenix/tm_phoenix.vmdl";
     public string DefaultCtModel { get; set; } = "characters/models/ctm_sas/ctm_sas.vmdl";

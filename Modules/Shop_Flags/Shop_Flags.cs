@@ -16,18 +16,19 @@ namespace ShopCore;
 )]
 public class Shop_Flags : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Flags";
     private const string TemplateFileName = "flags_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Permissions/Flags";
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FlagItemRuntime> itemRuntimeById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<ulong, HashSet<string>> activePermissionsBySteam = new();
     private readonly Dictionary<int, ulong> steamByPlayerId = new();
+    private FlagsModuleSettings runtimeSettings = new();
 
     public Shop_Flags(ISwiftlyCore core) : base(core) { }
 
@@ -42,7 +43,7 @@ public class Shop_Flags : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -99,6 +100,7 @@ public class Shop_Flags : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -108,6 +110,7 @@ public class Shop_Flags : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -200,8 +203,7 @@ public class Shop_Flags : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.flags.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemPurchased(IPlayer player, ShopItemDefinition item)
@@ -264,9 +266,24 @@ public class Shop_Flags : BasePlugin
             }
 
             player.SendChat(
-                $"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.flags.preview.info", item.DisplayName, runtime.GrantedPermission]}"
+                $"{GetPrefix(player)} {Core.Translation.GetPlayerLocalizer(player)["preview.info", item.DisplayName, runtime.GrantedPermission]}"
             );
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private void OnClientConnected(IOnClientConnectedEvent @event)
@@ -601,7 +618,7 @@ public class Shop_Flags : BasePlugin
                 new FlagItemTemplate
                 {
                     Id = "flag_slot_hourly",
-                    DisplayNameKey = "module.flags.item.slot.name",
+                    DisplayNameKey = "item.slot.name",
                     GrantedPermission = "swiftly.slot",
                     Price = 2500,
                     SellPrice = 1250,
@@ -630,6 +647,7 @@ internal sealed class FlagsModuleConfig
 
 internal sealed class FlagsModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Permissions/Flags";
 }
 
@@ -648,4 +666,3 @@ internal sealed class FlagItemTemplate
     public bool Enabled { get; set; } = true;
     public bool CanBeSold { get; set; } = true;
 }
-

@@ -34,7 +34,7 @@ public sealed class AdminCommandsConfig
 
 public sealed class CreditsConfig
 {
-    public string WalletName { get; set; } = ShopCoreApiV1.DefaultWalletKind;
+    public string WalletName { get; set; } = ShopCoreApiV2.DefaultWalletKind;
     public int StartingBalance { get; set; } = 0;
     public bool GrantStartingBalanceOncePerPlayer { get; set; } = true;
     public bool NotifyWhenStartingBalanceApplied { get; set; } = true;

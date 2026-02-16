@@ -21,7 +21,7 @@ namespace ShopCore;
 )]
 public class Shop_PlayerColor : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_PlayerColor";
     private const string TemplateFileName = "playercolor_config.jsonc";
     private const string TemplateSectionName = "Main";
@@ -37,8 +37,9 @@ public class Shop_PlayerColor : BasePlugin
     private readonly Dictionary<int, PlayerColorPreviewState> previewRuntimeByPlayerId = new();
     private readonly Random random = new();
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
+    private PlayerColorModuleSettings runtimeSettings = new();
 
     public Shop_PlayerColor(ISwiftlyCore core) : base(core)
     {
@@ -55,7 +56,7 @@ public class Shop_PlayerColor : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -197,6 +198,7 @@ public class Shop_PlayerColor : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -206,6 +208,7 @@ public class Shop_PlayerColor : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -297,8 +300,7 @@ public class Shop_PlayerColor : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.player_color.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -367,7 +369,7 @@ public class Shop_PlayerColor : BasePlugin
         );
 
         RefreshPlayerColor(player);
-        SendPreviewMessage(player, "module.player_color.preview.started", item.DisplayName, (int)PreviewDurationSeconds);
+        SendPreviewMessage(player, "preview.started", item.DisplayName, (int)PreviewDurationSeconds);
     }
 
     private void RefreshPlayerColor(IPlayer player)
@@ -479,8 +481,24 @@ public class Shop_PlayerColor : BasePlugin
                 return;
             }
 
-            player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer[key, args]}");
+            var loc = Core.Translation.GetPlayerLocalizer(player);
+            player.SendChat($"{GetPrefix(player)} {loc[key, args]}");
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private bool TryGetAlivePawn(IPlayer player, out CCSPlayerPawn pawn)
@@ -746,7 +764,7 @@ public class Shop_PlayerColor : BasePlugin
                 new PlayerColorItemTemplate
                 {
                     Id = "player_color_red_hourly",
-                    DisplayNameKey = "module.player_color.item.color.name",
+                    DisplayNameKey = "item.color.name",
                     Color = "Red",
                     Price = 700,
                     SellPrice = 350,
@@ -759,7 +777,7 @@ public class Shop_PlayerColor : BasePlugin
                 new PlayerColorItemTemplate
                 {
                     Id = "player_color_blue_hourly",
-                    DisplayNameKey = "module.player_color.item.color.name",
+                    DisplayNameKey = "item.color.name",
                     Color = "Blue",
                     Price = 700,
                     SellPrice = 350,
@@ -772,7 +790,7 @@ public class Shop_PlayerColor : BasePlugin
                 new PlayerColorItemTemplate
                 {
                     Id = "player_color_green_hourly",
-                    DisplayNameKey = "module.player_color.item.color.name",
+                    DisplayNameKey = "item.color.name",
                     Color = "Green",
                     Price = 700,
                     SellPrice = 350,
@@ -785,7 +803,7 @@ public class Shop_PlayerColor : BasePlugin
                 new PlayerColorItemTemplate
                 {
                     Id = "player_color_rainbow_hourly",
-                    DisplayNameKey = "module.player_color.item.rainbow.name",
+                    DisplayNameKey = "item.rainbow.name",
                     Color = "Rainbow",
                     Price = 1500,
                     SellPrice = 750,
@@ -798,7 +816,7 @@ public class Shop_PlayerColor : BasePlugin
                 new PlayerColorItemTemplate
                 {
                     Id = "player_color_purple_permanent",
-                    DisplayNameKey = "module.player_color.item.permanent.name",
+                    DisplayNameKey = "item.permanent.name",
                     Color = "Purple",
                     Price = 8000,
                     SellPrice = 4000,
@@ -829,6 +847,7 @@ internal sealed class PlayerColorModuleConfig
 
 internal sealed class PlayerColorModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Player Colors";
     public float DefaultRainbowUpdateIntervalSeconds { get; set; } = 0.5f;
 }

@@ -21,7 +21,7 @@ namespace ShopCore;
 )]
 public class Shop_Tracers : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Tracers";
     private const string TemplateFileName = "tracers_config.jsonc";
     private const string TemplateSectionName = "Main";
@@ -31,7 +31,7 @@ public class Shop_Tracers : BasePlugin
     private static readonly Color TeamTColor = new(255, 220, 50, 255);
     private static readonly Color TeamCtColor = new(80, 170, 255, 255);
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
 
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
@@ -57,7 +57,7 @@ public class Shop_Tracers : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -250,8 +250,7 @@ public class Shop_Tracers : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.tracers.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -309,10 +308,26 @@ public class Shop_Tracers : BasePlugin
                 return;
             }
 
+            var loc = Core.Translation.GetPlayerLocalizer(player);
             player.SendChat(
-                $"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.tracers.preview.started", item.DisplayName, (int)PreviewDurationSeconds]}"
+                $"{GetPrefix(player)} {loc["preview.started", item.DisplayName, (int)PreviewDurationSeconds]}"
             );
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private bool TryGetActiveRuntime(IPlayer player, out TracerItemRuntime runtime)
@@ -712,7 +727,6 @@ public class Shop_Tracers : BasePlugin
             config.Settings.DefaultEndWidth = 0.5f;
         }
     }
-
     private static TracersModuleConfig CreateDefaultConfig()
     {
         return new TracersModuleConfig
@@ -732,7 +746,7 @@ public class Shop_Tracers : BasePlugin
                     Id = "red_tracer_hourly",
                     Color = "Red",
                     ColorDisplayName = "Red",
-                    DisplayNameKey = "module.tracers.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 1250,
                     SellPrice = 625,
                     DurationSeconds = 3600,
@@ -746,7 +760,7 @@ public class Shop_Tracers : BasePlugin
                     Id = "green_tracer_hourly",
                     Color = "Green",
                     ColorDisplayName = "Green",
-                    DisplayNameKey = "module.tracers.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 1250,
                     SellPrice = 625,
                     DurationSeconds = 3600,
@@ -760,7 +774,7 @@ public class Shop_Tracers : BasePlugin
                     Id = "team_tracer_hourly",
                     Color = "Team",
                     ColorDisplayName = "Team",
-                    DisplayNameKey = "module.tracers.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 2000,
                     SellPrice = 1000,
                     DurationSeconds = 3600,
@@ -774,7 +788,7 @@ public class Shop_Tracers : BasePlugin
                     Id = "random_tracer_hourly",
                     Color = "Random",
                     ColorDisplayName = "Random",
-                    DisplayNameKey = "module.tracers.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 2500,
                     SellPrice = 1250,
                     DurationSeconds = 3600,
@@ -814,6 +828,7 @@ internal sealed class TracersModuleConfig
 
 internal sealed class TracersModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Tracers";
     public float DefaultLifeSeconds { get; set; } = 0.3f;
     public float DefaultStartWidth { get; set; } = 1.0f;
@@ -843,4 +858,3 @@ internal sealed class TracerItemTemplate
 }
 
 internal readonly record struct TracerPreviewState(TracerItemRuntime Runtime, float ExpiresAt);
-

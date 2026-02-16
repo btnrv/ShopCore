@@ -20,13 +20,13 @@ namespace ShopCore;
 )]
 public class Shop_Rewards : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Rewards";
     private const string TemplateFileName = "rewards_config.jsonc";
     private const string TemplateSectionName = "Main";
     private RewardsModuleConfig config = new();
     private int? lastRoundWinnerTeam;
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
 
     public Shop_Rewards(ISwiftlyCore core) : base(core)
     {
@@ -43,7 +43,7 @@ public class Shop_Rewards : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -219,12 +219,23 @@ public class Shop_Rewards : BasePlugin
     private void SendRewardMessage(IPlayer player, string key, int rewardConfig)
     {
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        player.SendChat($"{loc["shop.prefix"]} {loc[key, rewardConfig]}");
+        var prefix = loc["shop.prefix"];
+        if (config.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                prefix = corePrefix;
+            }
+        }
+
+        player.SendChat($"{prefix} {loc[key, rewardConfig]}");
     }
 }
 
 internal sealed class RewardsModuleConfig
 {
+    public bool UseCorePrefix { get; set; } = true;
     public int Kill { get; set; } = 2;
     public int Headshot { get; set; } = 5;
     public int Assist { get; set; } = 1;

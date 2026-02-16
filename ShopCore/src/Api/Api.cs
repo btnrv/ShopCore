@@ -10,7 +10,7 @@ using SwiftlyS2.Shared.Players;
 
 namespace ShopCore;
 
-internal sealed class ShopCoreApiV1 : IShopCoreApiV1
+internal sealed class ShopCoreApiV2 : IShopCoreApiV2
 {
     public const string DefaultWalletKind = "credits";
     private const string CookiePrefix = "shopcore:item";
@@ -36,7 +36,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
     private readonly Dictionary<ulong, long> previewCooldownUntilUnixMs = new();
     private IShopLedgerStore ledgerStore = new InMemoryShopLedgerStore(2000);
 
-    public ShopCoreApiV1(ShopCore plugin)
+    public ShopCoreApiV2(ShopCore plugin)
     {
         this.plugin = plugin;
     }
@@ -480,7 +480,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
     public decimal GetCredits(IPlayer player)
     {
         EnsureApis();
-        return plugin.economyApi.GetPlayerBalance(player, WalletKind);
+        return plugin.economyApi.GetPlayerBalance(player.SteamID, WalletKind);
     }
 
     public bool AddCredits(IPlayer player, decimal amount)
@@ -491,8 +491,8 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             return false;
         }
 
-        plugin.economyApi.AddPlayerBalance(player, WalletKind, creditsAmount);
-        var balanceAfter = plugin.economyApi.GetPlayerBalance(player, WalletKind);
+        plugin.economyApi.AddPlayerBalance(player.SteamID, WalletKind, creditsAmount);
+        var balanceAfter = plugin.economyApi.GetPlayerBalance(player.SteamID, WalletKind);
         RecordLedgerEntry(player, "credits_add", creditsAmount, balanceAfter);
         return true;
     }
@@ -505,13 +505,13 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             return false;
         }
 
-        if (!plugin.economyApi.HasSufficientFunds(player, WalletKind, creditsAmount))
+        if (!plugin.economyApi.HasSufficientFunds(player.SteamID, WalletKind, creditsAmount))
         {
             return false;
         }
 
-        plugin.economyApi.SubtractPlayerBalance(player, WalletKind, creditsAmount);
-        var balanceAfter = plugin.economyApi.GetPlayerBalance(player, WalletKind);
+        plugin.economyApi.SubtractPlayerBalance(player.SteamID, WalletKind, creditsAmount);
+        var balanceAfter = plugin.economyApi.GetPlayerBalance(player.SteamID, WalletKind);
         RecordLedgerEntry(player, "credits_subtract", creditsAmount, balanceAfter);
         return true;
     }
@@ -524,7 +524,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             return false;
         }
 
-        return plugin.economyApi.HasSufficientFunds(player, WalletKind, creditsAmount);
+        return plugin.economyApi.HasSufficientFunds(player.SteamID, WalletKind, creditsAmount);
     }
 
     public ShopTransactionResult PurchaseItem(IPlayer player, string itemId)
@@ -592,7 +592,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             );
         }
 
-        if (!plugin.economyApi.HasSufficientFunds(player, WalletKind, buyAmount))
+        if (!plugin.economyApi.HasSufficientFunds(player.SteamID, WalletKind, buyAmount))
         {
             return Fail(
                 ShopTransactionStatus.InsufficientCredits,
@@ -604,7 +604,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
             );
         }
 
-        plugin.economyApi.SubtractPlayerBalance(player, WalletKind, buyAmount);
+        plugin.economyApi.SubtractPlayerBalance(player.SteamID, WalletKind, buyAmount);
 
         long? expiresAt = null;
         if (tracksOwnership)
@@ -839,7 +839,7 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
         plugin.playerCookies.Unset(player, ExpireAtKey(item.Id));
         plugin.playerCookies.Save(player);
 
-        plugin.economyApi.AddPlayerBalance(player, WalletKind, sellAmount);
+        plugin.economyApi.AddPlayerBalance(player.SteamID, WalletKind, sellAmount);
 
         if (wasEnabled)
         {
@@ -1569,6 +1569,17 @@ internal sealed class ShopCoreApiV1 : IShopCoreApiV1
         catch
         {
             return ShopItemTeam.Any;
+        }
+    }
+    public string? GetShopPrefix(IPlayer? player)
+    {
+        if (player == null)
+        {
+            return plugin.Localizer["shop.prefix"];
+        }
+        else
+        {
+            return plugin.Localize(player, "shop.prefix");
         }
     }
 }

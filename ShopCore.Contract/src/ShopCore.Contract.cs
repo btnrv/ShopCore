@@ -172,7 +172,7 @@ public sealed record ShopLedgerEntry(
     string? ItemId = null,
     string? ItemDisplayName = null
 );
-public interface IShopCoreApiV1
+public interface IShopCoreApiV2
 {
     /// <summary>
     /// Wallet kind used by the shop economy.
@@ -338,7 +338,14 @@ public interface IShopCoreApiV1
     long? GetItemExpireAt(IPlayer player, string itemId);
 
     /// <summary>
+    /// Gets the core prefix from ShopCore translations
+    /// If player isn't null, it will return Translation.GetPlayerLocalizer
+    /// Otherwise, it will return Core.Localizer[]
+    /// </summary>
+    string? GetShopPrefix(IPlayer? player);
+    /// <summary>
     /// Gets recent ledger entries in descending order (newest first).
+    /// If player is not null, it will return 
     /// </summary>
     IReadOnlyCollection<ShopLedgerEntry> GetRecentLedgerEntries(int maxEntries = 100);
 

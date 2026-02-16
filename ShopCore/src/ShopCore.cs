@@ -12,24 +12,26 @@ namespace ShopCore;
 
 [PluginMetadata(
     Id = "ShopCore",
-    Version = "v1.0.5",
+    Version = "v1.0.6",
     Name = "ShopCore",
     Author = "T3Marius",
     Description = "Core shop plugin exposing items and credits API."
 )]
 public partial class ShopCore : BasePlugin
 {
-    public const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    public const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     public const string PlayerCookiesInterfaceKey = "Cookies.Player.v1";
     public const string PlayerCookiesInterfaceKeyLegacy = "Cookies.Player.V1";
-    public const string EconomyInterfaceKey = "Economy.API.v1";
-    public const string EconomyInterfaceKeyLegacy = "Economy.API.V1";
+    public const string EconomyInterfaceKey = "Economy.API.v2";
+    public const string EconomyInterfaceKeyLegacy = "Economy.API.v1";
+    public const string EconomyInterfaceKeyLegacyUpper = "Economy.API.V1";
+    public ILocalizer Localizer { get; set; } = null!;
 
-    private readonly ShopCoreApiV1 shopApi;
+    private readonly ShopCoreApiV2 shopApi;
 
     public ShopCore(ISwiftlyCore core) : base(core)
     {
-        shopApi = new ShopCoreApiV1(this);
+        shopApi = new ShopCoreApiV2(this);
     }
 
     public IPlayerCookiesAPIv1 playerCookies = null!;
@@ -37,7 +39,7 @@ public partial class ShopCore : BasePlugin
 
     public override void ConfigureSharedInterface(IInterfaceManager interfaceManager)
     {
-        interfaceManager.AddSharedInterface<IShopCoreApiV1, ShopCoreApiV1>(ShopCoreInterfaceKey, shopApi);
+        interfaceManager.AddSharedInterface<IShopCoreApiV2, ShopCoreApiV2>(ShopCoreInterfaceKey, shopApi);
     }
 
     public override void UseSharedInterface(IInterfaceManager interfaceManager)
@@ -52,7 +54,7 @@ public partial class ShopCore : BasePlugin
 
         economyApi = ResolveSharedInterface<IEconomyAPIv1>(
             interfaceManager,
-            [EconomyInterfaceKey, EconomyInterfaceKeyLegacy]
+            [EconomyInterfaceKey, EconomyInterfaceKeyLegacy, EconomyInterfaceKeyLegacyUpper]
         )!;
     }
 
@@ -67,14 +69,15 @@ public partial class ShopCore : BasePlugin
             var hasCookies = interfaceManager.HasSharedInterface(PlayerCookiesInterfaceKey)
                 || interfaceManager.HasSharedInterface(PlayerCookiesInterfaceKeyLegacy);
             var hasEconomy = interfaceManager.HasSharedInterface(EconomyInterfaceKey)
-                || interfaceManager.HasSharedInterface(EconomyInterfaceKeyLegacy);
+                || interfaceManager.HasSharedInterface(EconomyInterfaceKeyLegacy)
+                || interfaceManager.HasSharedInterface(EconomyInterfaceKeyLegacyUpper);
 
             Core.Logger.LogError(
                 "ShopCore dependencies are missing or incompatible. Required interfaces: '{CookiesKey}', '{EconomyKey}'. " +
                 "HasSharedInterface(Cookies)={HasCookies}, HasSharedInterface(Economy)={HasEconomy}, " +
                 "Expected Cookies contract assembly='{CookiesAssembly}', Expected Economy contract assembly='{EconomyAssembly}'.",
                 $"{PlayerCookiesInterfaceKey} | {PlayerCookiesInterfaceKeyLegacy}",
-                $"{EconomyInterfaceKey} | {EconomyInterfaceKeyLegacy}",
+                $"{EconomyInterfaceKey} | {EconomyInterfaceKeyLegacy} | {EconomyInterfaceKeyLegacyUpper}",
                 hasCookies,
                 hasEconomy,
                 typeof(IPlayerCookiesAPIv1).Assembly.FullName,
@@ -93,6 +96,7 @@ public partial class ShopCore : BasePlugin
 
     public override void Load(bool hotReload)
     {
+        Localizer = Core.Localizer;
         InitializeConfiguration();
     }
 
