@@ -72,7 +72,7 @@ public partial class ShopCore
 
         if (string.IsNullOrWhiteSpace(Settings.Credits.WalletName))
         {
-            Settings.Credits.WalletName = ShopCoreApiV1.DefaultWalletKind;
+            Settings.Credits.WalletName = ShopCoreApiV2.DefaultWalletKind;
         }
         else
         {
@@ -354,10 +354,10 @@ public partial class ShopCore
             return;
         }
 
-        var current = economyApi.GetPlayerBalance(player, shopApi.WalletKind);
+        var current = economyApi.GetPlayerBalance(player.SteamID, shopApi.WalletKind);
         if (current < target)
         {
-            economyApi.SetPlayerBalance(player, shopApi.WalletKind, target);
+            economyApi.SetPlayerBalance(player.SteamID, shopApi.WalletKind, target);
 
             if (Settings.Credits.NotifyWhenStartingBalanceApplied)
             {
@@ -415,7 +415,7 @@ public partial class ShopCore
             }
 
             EnsureStartingBalance(player);
-            economyApi.AddPlayerBalance(player, shopApi.WalletKind, timedIncome.AmountPerInterval);
+            economyApi.AddPlayerBalance(player.SteamID, shopApi.WalletKind, timedIncome.AmountPerInterval);
 
             if (timedIncome.NotifyPlayers)
             {
