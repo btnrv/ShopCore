@@ -16,7 +16,7 @@ namespace ShopCore;
 )]
 public class Shop_Coinflip : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Coinflip";
     private const string TemplateFileName = "coinflip_config.jsonc";
     private const string TemplateSectionName = "Main";
@@ -24,7 +24,7 @@ public class Shop_Coinflip : BasePlugin
 
     private readonly Dictionary<ulong, DateTimeOffset> cooldownBySteam = new();
     private readonly List<Guid> registeredCommands = new();
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private CoinflipModuleConfig settings = new();
 
     public Shop_Coinflip(ISwiftlyCore core) : base(core) { }
@@ -40,7 +40,7 @@ public class Shop_Coinflip : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -151,7 +151,7 @@ public class Shop_Coinflip : BasePlugin
 
         if (!settings.Enabled)
         {
-            Reply(context, "module.coinflip.disabled");
+            Reply(context, "coinflip.disabled");
             return;
         }
 
@@ -163,25 +163,25 @@ public class Shop_Coinflip : BasePlugin
 
         if (context.Args.Length < 1)
         {
-            Reply(context, "module.coinflip.usage", settings.Commands.FirstOrDefault() ?? "coinflip");
+            Reply(context, "coinflip.usage", settings.Commands.FirstOrDefault() ?? "coinflip");
             return;
         }
 
         if (!int.TryParse(context.Args[0], out var bet))
         {
-            Reply(context, "module.coinflip.invalid_bet", settings.MinimumBet, settings.MaximumBet);
+            Reply(context, "coinflip.invalid_bet", settings.MinimumBet, settings.MaximumBet);
             return;
         }
 
         if (bet < settings.MinimumBet)
         {
-            Reply(context, "module.coinflip.min_bet", settings.MinimumBet);
+            Reply(context, "coinflip.min_bet", settings.MinimumBet);
             return;
         }
 
         if (bet > settings.MaximumBet)
         {
-            Reply(context, "module.coinflip.max_bet", settings.MaximumBet);
+            Reply(context, "coinflip.max_bet", settings.MaximumBet);
             return;
         }
 
@@ -192,20 +192,20 @@ public class Shop_Coinflip : BasePlugin
             if (now < nextAllowedTime)
             {
                 var remaining = (int)Math.Ceiling((nextAllowedTime - now).TotalSeconds);
-                Reply(context, "module.coinflip.cooldown", remaining);
+                Reply(context, "coinflip.cooldown", remaining);
                 return;
             }
         }
 
         if (!shopApi.HasCredits(player, bet))
         {
-            Reply(context, "module.coinflip.no_credits", bet);
+            Reply(context, "coinflip.no_credits", bet);
             return;
         }
 
         if (!shopApi.SubtractCredits(player, bet))
         {
-            Reply(context, "module.coinflip.internal_error");
+            Reply(context, "coinflip.internal_error");
             return;
         }
 
@@ -220,19 +220,20 @@ public class Shop_Coinflip : BasePlugin
             var reward = Math.Max(1, (int)Math.Round(bet * settings.WinMultiplier, MidpointRounding.AwayFromZero));
             _ = shopApi.AddCredits(player, reward);
             var balance = shopApi.GetCredits(player);
-            Reply(context, "module.coinflip.won", reward, balance);
+            Reply(context, "coinflip.won", reward, balance);
             return;
         }
 
         var lostBalance = shopApi.GetCredits(player);
-        Reply(context, "module.coinflip.lost", bet, lostBalance);
+        Reply(context, "coinflip.lost", bet, lostBalance);
     }
 
     private void Reply(ICommandContext context, string key, params object[] args)
     {
-        var message = BuildPrefixedMessage(key, args);
+        var player = context.Sender as IPlayer;
+        var message = BuildPrefixedMessage(player, key, args);
 
-        if (context.Sender is IPlayer player && player.IsValid)
+        if (player is not null && player.IsValid)
         {
             player.SendChat(message);
             return;
@@ -241,16 +242,48 @@ public class Shop_Coinflip : BasePlugin
         context.Reply(message);
     }
 
-    private string BuildPrefixedMessage(string key, params object[] args)
+    private string BuildPrefixedMessage(IPlayer? player, string key, params object[] args)
     {
-        var body = args.Length == 0 ? Core.Localizer[key] : Core.Localizer[key, args];
-        var prefix = Core.Localizer["shop.prefix"];
+        string body;
+        string prefix;
+
+        if (player is not null && player.IsValid)
+        {
+            var loc = Core.Translation.GetPlayerLocalizer(player);
+            body = args.Length == 0 ? loc[key] : loc[key, args];
+            prefix = ResolvePrefix(player);
+            return $"{prefix} {body}";
+        }
+
+        body = args.Length == 0 ? Core.Localizer[key] : Core.Localizer[key, args];
+        prefix = Core.Localizer["shop.prefix"];
         if (string.IsNullOrWhiteSpace(prefix) || string.Equals(prefix, "shop.prefix", StringComparison.Ordinal))
         {
             prefix = FallbackShopPrefix;
         }
 
         return $"{prefix} {body}";
+    }
+
+    private string ResolvePrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (settings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        var modulePrefix = loc["shop.prefix"];
+        if (string.IsNullOrWhiteSpace(modulePrefix) || string.Equals(modulePrefix, "shop.prefix", StringComparison.Ordinal))
+        {
+            return FallbackShopPrefix;
+        }
+
+        return modulePrefix;
     }
 
     private static void NormalizeConfig(CoinflipModuleConfig config)
@@ -316,6 +349,7 @@ public class Shop_Coinflip : BasePlugin
 
 internal sealed class CoinflipModuleConfig
 {
+    public bool UseCorePrefix { get; set; } = true;
     public bool Enabled { get; set; } = true;
     public List<string> Commands { get; set; } = [];
     public bool RegisterAsRawCommands { get; set; } = false;

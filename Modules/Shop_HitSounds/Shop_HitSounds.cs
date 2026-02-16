@@ -18,17 +18,18 @@ namespace ShopCore;
 )]
 public class Shop_HitSounds : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_HitSounds";
     private const string TemplateFileName = "hitsounds_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Sounds/Hit Sounds";
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> registeredItemOrder = new();
     private readonly Dictionary<string, HitSoundItemRuntime> itemRuntimeById = new(StringComparer.OrdinalIgnoreCase);
+    private HitSoundsModuleSettings runtimeSettings = new();
 
     public Shop_HitSounds(ISwiftlyCore core) : base(core) { }
 
@@ -43,7 +44,7 @@ public class Shop_HitSounds : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -116,6 +117,7 @@ public class Shop_HitSounds : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -125,6 +127,7 @@ public class Shop_HitSounds : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -215,8 +218,7 @@ public class Shop_HitSounds : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.hitsounds.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -288,7 +290,7 @@ public class Shop_HitSounds : BasePlugin
         }
 
         PlayHitSound(player, runtime.SoundPath);
-        SendPreviewMessage(player, "module.hitsounds.preview.played", item.DisplayName);
+        SendPreviewMessage(player, "preview.played", item.DisplayName);
     }
 
     private bool TryGetEnabledSound(IPlayer player, out string soundPath)
@@ -361,8 +363,24 @@ public class Shop_HitSounds : BasePlugin
                 return;
             }
 
-            player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer[key, args]}");
+            var loc = Core.Translation.GetPlayerLocalizer(player);
+            player.SendChat($"{GetPrefix(player)} {loc[key, args]}");
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private bool TryCreateDefinition(
@@ -527,7 +545,7 @@ public class Shop_HitSounds : BasePlugin
                 new HitSoundItemTemplate
                 {
                     Id = "hitsound_bell_hourly",
-                    DisplayNameKey = "module.hitsounds.item.bell.name",
+                    DisplayNameKey = "item.bell.name",
                     SoundPath = "sounds/training/bell_normal.vsnd_c",
                     Price = 1200,
                     SellPrice = 600,
@@ -556,6 +574,7 @@ internal sealed class HitSoundsModuleConfig
 
 internal sealed class HitSoundsModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Hit Sounds";
 }
 

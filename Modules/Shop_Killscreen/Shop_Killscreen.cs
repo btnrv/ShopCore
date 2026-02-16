@@ -19,16 +19,17 @@ namespace ShopCore;
 )]
 public class Shop_Killscreen : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Killscreen";
     private const string TemplateFileName = "killscreen_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Visuals/Kill Screens";
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> registeredItemOrder = new();
+    private KillscreenModuleSettings runtimeSettings = new();
 
     public Shop_Killscreen(ISwiftlyCore core) : base(core) { }
     public override void UseSharedInterface(IInterfaceManager interfaceManager)
@@ -42,7 +43,7 @@ public class Shop_Killscreen : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -115,6 +116,7 @@ public class Shop_Killscreen : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -124,6 +126,7 @@ public class Shop_Killscreen : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -226,8 +229,23 @@ public class Shop_Killscreen : BasePlugin
             var currentTime = Core.Engine.GlobalVars.CurrentTime;
             pawn.HealthShotBoostExpirationTime.Value = currentTime + 1.0f;
             pawn.HealthShotBoostExpirationTimeUpdated();
-            player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.killscreen.preview.started", item.DisplayName]}");
+            player.SendChat($"{GetPrefix(player)} {Core.Translation.GetPlayerLocalizer(player)["preview.started", item.DisplayName]}");
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
     private bool TryCreateDefinition(
         KillscreenItemTemplate itemTemplate,
@@ -324,7 +342,7 @@ public class Shop_Killscreen : BasePlugin
                 new KillscreenItemTemplate
                 {
                     Id = "killscreen_hourly",
-                    DisplayNameKey = "module.killscreen.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 1000,
                     SellPrice = 500,
                     DurationSeconds = 3600,
@@ -336,7 +354,7 @@ public class Shop_Killscreen : BasePlugin
                 new KillscreenItemTemplate
                 {
                     Id = "killscreen_perm",
-                    DisplayNameKey = "module.killscreen.item.permanent.name",
+                    DisplayNameKey = "item.permanent.name",
                     Price = 5000,
                     SellPrice = 500,
                     DurationSeconds = 0,
@@ -401,6 +419,7 @@ internal sealed class KillscreenModuleConfig
 }
 internal sealed class KillscreenModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Kill Screens";
 }
 internal sealed class KillscreenItemTemplate

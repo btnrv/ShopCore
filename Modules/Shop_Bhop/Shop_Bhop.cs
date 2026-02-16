@@ -17,7 +17,7 @@ namespace ShopCore;
 )]
 public class Shop_Bhop : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_Bhop";
     private const string TemplateFileName = "bhop_config.jsonc";
     private const string TemplateSectionName = "Main";
@@ -25,7 +25,7 @@ public class Shop_Bhop : BasePlugin
     private const float PreviewDurationSeconds = 8f;
     private const int PreviewCooldownSeconds = 12;
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
 
     private IConVar<bool>? autoBhopConVar;
@@ -40,6 +40,7 @@ public class Shop_Bhop : BasePlugin
     private readonly Dictionary<int, BhopPreviewState> previewStateByPlayerId = new();
     private readonly Dictionary<ulong, DateTimeOffset> previewCooldownBySteam = new();
     private int pendingConVarSync;
+    private BhopModuleSettings runtimeSettings = new();
 
     public Shop_Bhop(ISwiftlyCore core) : base(core) { }
 
@@ -54,7 +55,7 @@ public class Shop_Bhop : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -127,6 +128,7 @@ public class Shop_Bhop : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -136,6 +138,7 @@ public class Shop_Bhop : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -226,8 +229,7 @@ public class Shop_Bhop : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
-        context.Block($"{prefix} {loc["module.bhop.error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
+        context.Block($"{GetPrefix(player)} {loc["error.permission", context.Item.DisplayName, runtime.RequiredPermission]}");
     }
 
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
@@ -295,7 +297,7 @@ public class Shop_Bhop : BasePlugin
         if (previewCooldownBySteam.TryGetValue(player.SteamID, out var nextAllowedAt) && now < nextAllowedAt)
         {
             var remaining = (int)Math.Ceiling((nextAllowedAt - now).TotalSeconds);
-            SendPreviewMessage(player, "module.bhop.preview.cooldown", remaining);
+            SendPreviewMessage(player, "preview.cooldown", remaining);
             return;
         }
 
@@ -305,7 +307,7 @@ public class Shop_Bhop : BasePlugin
             ExpiresAt: Core.Engine.GlobalVars.CurrentTime + PreviewDurationSeconds
         );
 
-        SendPreviewMessage(player, "module.bhop.preview.started", item.DisplayName, (int)PreviewDurationSeconds);
+        SendPreviewMessage(player, "preview.started", item.DisplayName, (int)PreviewDurationSeconds);
     }
 
     private void OnClientConnected(IOnClientConnectedEvent @event)
@@ -584,8 +586,24 @@ public class Shop_Bhop : BasePlugin
                 return;
             }
 
-            player.SendChat($"{Core.Localizer["shop.prefix"]} {Core.Localizer[key, args]}");
+            var loc = Core.Translation.GetPlayerLocalizer(player);
+            player.SendChat($"{GetPrefix(player)} {loc[key, args]}");
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private static void ClampPlayerSpeed(IPlayer player, int maxSpeed)
@@ -762,7 +780,7 @@ public class Shop_Bhop : BasePlugin
                 new BhopItemTemplate
                 {
                     Id = "bhop_fullspeed_hourly",
-                    DisplayNameKey = "module.bhop.item.fullspeed.name",
+                    DisplayNameKey = "item.fullspeed.name",
                     Price = 2500,
                     SellPrice = 1250,
                     DurationSeconds = 3600,
@@ -775,7 +793,7 @@ public class Shop_Bhop : BasePlugin
                 new BhopItemTemplate
                 {
                     Id = "bhop_limited_350_hourly",
-                    DisplayNameKey = "module.bhop.item.limited350.name",
+                    DisplayNameKey = "item.limited350.name",
                     Price = 2000,
                     SellPrice = 1000,
                     DurationSeconds = 3600,
@@ -808,6 +826,7 @@ internal sealed class BhopModuleConfig
 
 internal sealed class BhopModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Movement/Bhop";
 }
 

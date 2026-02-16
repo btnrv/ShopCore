@@ -20,14 +20,14 @@ namespace ShopCore;
 )]
 public class Shop_DecoyTeleport : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_DecoyTeleport";
     private const string TemplateFileName = "decoy_teleport_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Abilities";
     private const float DefaultTeleportZOffset = 8f;
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private readonly object stateSync = new();
     private readonly HashSet<int> armedPlayers = [];
     private readonly Dictionary<ulong, long> cooldownUntilUnixSeconds = [];
@@ -50,7 +50,7 @@ public class Shop_DecoyTeleport : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -105,7 +105,7 @@ public class Shop_DecoyTeleport : BasePlugin
 
         itemRegistered = shopApi.RegisterItem(new ShopItemDefinition(
             Id: Config.Decoy.Id,
-            DisplayName: Core.Localizer["decoy_teleport_module.item.name"],
+            DisplayName: Core.Localizer["item.name"],
             Category: Config.Settings.Category ?? DefaultCategory,
             Price: Config.Decoy.Price,
             Team: team,
@@ -137,24 +137,24 @@ public class Shop_DecoyTeleport : BasePlugin
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
-        var prefix = loc["shop.prefix"];
+        var prefix = GetPrefix(player);
 
         if (!IsPlayerAlive(player))
         {
-            context.Block($"{prefix} {loc["decoy_teleport_module.error.must_be_alive"]}");
+            context.Block($"{prefix} {loc["error.must_be_alive"]}");
             return;
         }
 
         if (HasArmedDecoy(player.PlayerID))
         {
-            context.Block($"{prefix} {loc["decoy_teleport_module.error.already_have_decoy"]}");
+            context.Block($"{prefix} {loc["error.already_have_decoy"]}");
             return;
         }
 
         var remaining = GetCooldownRemainingSeconds(player.SteamID);
         if (remaining > 0)
         {
-            context.Block($"{prefix} {loc["decoy_teleport_module.error.cooldown", remaining]}");
+            context.Block($"{prefix} {loc["error.cooldown", remaining]}");
         }
     }
 
@@ -173,12 +173,12 @@ public class Shop_DecoyTeleport : BasePlugin
             var given = player.PlayerPawn?.ItemServices?.GiveItem<CBaseEntity>("weapon_decoy");
             if (given is null || !given.IsValid)
             {
-                SendLocalized(player, "decoy_teleport_module.error.give_failed");
+                SendLocalized(player, "error.give_failed");
                 return;
             }
 
             SetArmed(player.PlayerID, true);
-            SendLocalized(player, "decoy_teleport_module.armed");
+            SendLocalized(player, "state.armed");
         });
     }
 
@@ -206,7 +206,7 @@ public class Shop_DecoyTeleport : BasePlugin
             {
                 thrower.PlayerPawn?.Teleport(destination, null, Vector.Zero);
                 ApplyCooldown(thrower.SteamID);
-                SendLocalized(thrower, "decoy_teleport_module.teleported", Config.Settings.DecoyCooldown);
+                SendLocalized(thrower, "state.teleported", Config.Settings.DecoyCooldown);
             }
             catch (Exception ex)
             {
@@ -239,7 +239,7 @@ public class Shop_DecoyTeleport : BasePlugin
         if (HasArmedDecoy(player.PlayerID))
         {
             SetArmed(player.PlayerID, false);
-            SendLocalized(player, "decoy_teleport_module.disarmed_on_death");
+            SendLocalized(player, "state.disarmed_on_death");
         }
 
         return HookResult.Continue;
@@ -391,8 +391,23 @@ public class Shop_DecoyTeleport : BasePlugin
             }
 
             var loc = Core.Translation.GetPlayerLocalizer(player);
-            player.SendChat($"{loc["shop.prefix"]} {loc[key, args]}");
+            player.SendChat($"{GetPrefix(player)} {loc[key, args]}");
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (Config.Settings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private static void NormalizeConfig(DecoyModuleConfig config)
@@ -445,6 +460,7 @@ internal sealed class DecoyModuleConfig
 
 internal sealed class DecoyModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Abilities";
     public int DecoyCooldown { get; set; } = 30;
     public float TeleportZOffset { get; set; } = 8f;

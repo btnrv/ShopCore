@@ -18,19 +18,20 @@ namespace ShopCore;
 )]
 public class Shop_SmokeColor : BasePlugin
 {
-    private const string ShopCoreInterfaceKey = "ShopCore.API.v1";
+    private const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     private const string ModulePluginId = "Shop_SmokeColor";
     private const string TemplateFileName = "smokecolor_config.jsonc";
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Visuals/Smoke Colors";
 
-    private IShopCoreApiV1? shopApi;
+    private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private const float PreviewDurationSeconds = 15f;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> registeredItemOrder = new();
     private readonly Dictionary<string, Vector> itemColorsById = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, SmokePreviewState> previewColorByPlayerId = new();
+    private SmokeColorModuleSettings runtimeSettings = new();
 
     public Shop_SmokeColor(ISwiftlyCore core) : base(core) { }
 
@@ -45,7 +46,7 @@ public class Shop_SmokeColor : BasePlugin
 
         try
         {
-            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV1>(ShopCoreInterfaceKey);
+            shopApi = interfaceManager.GetSharedInterface<IShopCoreApiV2>(ShopCoreInterfaceKey);
         }
         catch (Exception ex)
         {
@@ -191,6 +192,7 @@ public class Shop_SmokeColor : BasePlugin
             TemplateSectionName
         );
         NormalizeConfig(moduleConfig);
+        runtimeSettings = moduleConfig.Settings;
 
         var category = string.IsNullOrWhiteSpace(moduleConfig.Settings.Category)
             ? DefaultCategory
@@ -200,6 +202,7 @@ public class Shop_SmokeColor : BasePlugin
         {
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
+            runtimeSettings = moduleConfig.Settings;
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -313,10 +316,26 @@ public class Shop_SmokeColor : BasePlugin
                 return;
             }
 
+            var loc = Core.Translation.GetPlayerLocalizer(player);
             player.SendChat(
-                $"{Core.Localizer["shop.prefix"]} {Core.Localizer["module.smoke_color.preview.started", item.DisplayName, (int)PreviewDurationSeconds]}"
+                $"{GetPrefix(player)} {loc["preview.started", item.DisplayName, (int)PreviewDurationSeconds]}"
             );
         });
+    }
+
+    private string GetPrefix(IPlayer player)
+    {
+        var loc = Core.Translation.GetPlayerLocalizer(player);
+        if (runtimeSettings.UseCorePrefix)
+        {
+            var corePrefix = shopApi?.GetShopPrefix(player);
+            if (!string.IsNullOrWhiteSpace(corePrefix))
+            {
+                return corePrefix;
+            }
+        }
+
+        return loc["shop.prefix"];
     }
 
     private bool TryGetPreviewSmokeColor(IPlayer player, out Vector color)
@@ -458,7 +477,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "red_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -472,7 +491,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "blue_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -486,7 +505,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "green_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -500,7 +519,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "yellow_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -514,7 +533,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "purple_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -528,7 +547,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "cyan_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -542,7 +561,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "orange_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -556,7 +575,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "pink_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -570,7 +589,7 @@ public class Shop_SmokeColor : BasePlugin
                 new SmokeColorItemTemplate
                 {
                     Id = "white_smoke_hourly",
-                    DisplayNameKey = "module.smoke_color.item.temporary.name",
+                    DisplayNameKey = "item.temporary.name",
                     Price = 450,
                     SellPrice = 225,
                     DurationSeconds = 3600,
@@ -638,6 +657,7 @@ internal sealed class SmokeColorModuleConfig
 }
 internal sealed class SmokeColorModuleSettings
 {
+    public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Smoke Colors";
 }
 internal sealed class SmokeColorItemTemplate
