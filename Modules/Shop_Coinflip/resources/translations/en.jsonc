@@ -1,13 +1,13 @@
 {
-    "shop.prefix": "[gold]★[red] [Store][default]",
-    "module.coinflip.disabled": "Coinflip is currently [lightred]disabled[default].",
-    "module.coinflip.usage": "Usage: [lightyellow]!{0} <amount>[default]",
-    "module.coinflip.invalid_bet": "Invalid bet. Allowed range: [lightyellow]{0}[default]-[lightyellow]{1}[default].",
-    "module.coinflip.min_bet": "Minimum bet is [lightyellow]{0}[default] credits.",
-    "module.coinflip.max_bet": "Maximum bet is [lightyellow]{0}[default] credits.",
-    "module.coinflip.cooldown": "Please wait [lightyellow]{0}[default]s before betting again.",
-    "module.coinflip.no_credits": "You do not have enough credits to bet [lightyellow]{0}[default].",
-    "module.coinflip.internal_error": "Coinflip failed due to an internal error. Try again.",
-    "module.coinflip.won": "You won [lime]+{0}[default] credits. New balance: [lime]{1}[default].",
-    "module.coinflip.lost": "You lost [lightred]{0}[default] credits. New balance: [lightyellow]{1}[default]."
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "coinflip.disabled": "Coinflip is currently [lightred]disabled[default].",
+    "coinflip.usage": "Usage: [lightyellow]!{0} <amount>[default]",
+    "coinflip.invalid_bet": "Invalid bet. Allowed range: [lightyellow]{0}[default]-[lightyellow]{1}[default].",
+    "coinflip.min_bet": "Minimum bet is [lightyellow]{0}[default] credits.",
+    "coinflip.max_bet": "Maximum bet is [lightyellow]{0}[default] credits.",
+    "coinflip.cooldown": "Please wait [lightyellow]{0}[default]s before betting again.",
+    "coinflip.no_credits": "You do not have enough credits to bet [lightyellow]{0}[default].",
+    "coinflip.internal_error": "Coinflip failed due to an internal error. Try again.",
+    "coinflip.won": "You won [lime]+{0}[default] credits. New balance: [lime]{1}[default].",
+    "coinflip.lost": "You lost [lightred]{0}[default] credits. New balance: [lightyellow]{1}[default]."
 }

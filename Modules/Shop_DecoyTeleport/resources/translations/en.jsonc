@@ -1,11 +1,11 @@
 {
-    "shop.prefix": "[gold]★[red] [Store][default]",
-    "decoy_teleport_module.item.name": "Decoy Teleport",
-    "decoy_teleport_module.error.already_have_decoy": "You already have an armed decoy teleport.",
-    "decoy_teleport_module.error.cooldown": "Decoy teleport is on cooldown for [lightyellow]{0}[default]s.",
-    "decoy_teleport_module.error.must_be_alive": "You must be alive to buy decoy teleport.",
-    "decoy_teleport_module.error.give_failed": "Failed to give decoy grenade.",
-    "decoy_teleport_module.armed": "Decoy teleport armed. Throw your decoy to teleport.",
-    "decoy_teleport_module.teleported": "Teleported. Cooldown: [lightyellow]{0}[default]s.",
-    "decoy_teleport_module.disarmed_on_death": "[red]You died[default]. Your armed decoy teleport was removed."
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "item.name": "Decoy Teleport",
+    "error.already_have_decoy": "You already have an armed decoy teleport.",
+    "error.cooldown": "Decoy teleport is on cooldown for [lightyellow]{0}[default]s.",
+    "error.must_be_alive": "You must be alive to buy decoy teleport.",
+    "error.give_failed": "Failed to give decoy grenade.",
+    "state.armed": "Decoy teleport armed. Throw your decoy to teleport.",
+    "state.teleported": "Teleported. Cooldown: [lightyellow]{0}[default]s.",
+    "state.disarmed_on_death": "[red]You died[default]. Your armed decoy teleport was removed."
 }

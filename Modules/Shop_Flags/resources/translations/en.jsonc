@@ -1,6 +1,6 @@
-﻿{
-    "shop.prefix": "[gold]★[red] [Store][default]",
-    "module.flags.item.slot.name": "Slot Flag ({0})",
-    "module.flags.error.permission": "You need [{1}] to purchase {0}.",
-    "module.flags.preview.info": "[lightyellow]{0}[default] grants permission [lightyellow]{1}[default] while equipped."
+{
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "item.slot.name": "Slot Flag ({0})",
+    "error.permission": "You need [{1}] to purchase {0}.",
+    "preview.info": "[lightyellow]{0}[default] grants permission [lightyellow]{1}[default] while equipped."
 }
