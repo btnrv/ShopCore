@@ -22,6 +22,11 @@ public class Shop_Flags : BasePlugin
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Permissions/Flags";
 
+    // FIX: ShopCore often loads player items async after connect/reconnect.
+    // We re-sync permissions a few times after connect (and after core ready sync) so owned/enabled items restore flags.
+    private const int ConnectResyncAttempts = 20;          // 20 * 0.5s = 10 seconds total
+    private const float ConnectResyncDelaySeconds = 0.5f;
+
     private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
@@ -297,6 +302,47 @@ public class Shop_Flags : BasePlugin
             }
 
             SyncPlayerPermissions(player);
+
+            // FIX: ShopCore can load inventory/cookies async after connect.
+            // Retry a few times so IsItemEnabled becomes accurate and flags are restored.
+            ScheduleConnectResync(player, attempt: 1);
+        });
+    }
+
+    private void ScheduleConnectResync(IPlayer player, int attempt)
+    {
+        if (attempt > ConnectResyncAttempts)
+        {
+            return;
+        }
+
+        if (!player.IsValid || player.IsFakeClient)
+        {
+            return;
+        }
+
+        var expectedSteam = player.SteamID;
+        var expectedPlayerId = player.PlayerID;
+
+        Core.Scheduler.DelayBySeconds(ConnectResyncDelaySeconds, () =>
+        {
+            RunOnMainThread(() =>
+            {
+                // Player might have disconnected / slot reused
+                var current = Core.PlayerManager.GetPlayer(expectedPlayerId);
+                if (current is null || !current.IsValid || current.IsFakeClient)
+                {
+                    return;
+                }
+
+                if (current.SteamID != expectedSteam)
+                {
+                    return;
+                }
+
+                SyncPlayerPermissions(current);
+                ScheduleConnectResync(current, attempt + 1);
+            });
         });
     }
 
@@ -324,6 +370,9 @@ public class Shop_Flags : BasePlugin
             }
 
             SyncPlayerPermissions(player);
+
+            // FIX: same reasoning as connect (players already online when module loads/hotreloads)
+            ScheduleConnectResync(player, attempt: 1);
         }
     }
 
