@@ -22,12 +22,23 @@ public class Shop_Flags : BasePlugin
     private const string TemplateSectionName = "Main";
     private const string DefaultCategory = "Permissions/Flags";
 
+    // Longer resync window for async inventory/cookie load
+    private const int ConnectResyncAttempts = 120;         // 120 * 0.5s = 60s
+    private const float ConnectResyncDelaySeconds = 0.5f;
+
+    // During this window we DO NOT remove existing permissions if ShopCore still reports nothing enabled.
+    // This prevents temporary flags disappearing on reconnect due to early "empty" state.
+    private static readonly TimeSpan RemovalGraceWindow = TimeSpan.FromSeconds(60);
+
     private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
     private readonly HashSet<string> registeredItemIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, FlagItemRuntime> itemRuntimeById = new(StringComparer.OrdinalIgnoreCase);
+
     private readonly Dictionary<ulong, HashSet<string>> activePermissionsBySteam = new();
     private readonly Dictionary<int, ulong> steamByPlayerId = new();
+    private readonly Dictionary<ulong, DateTime> connectAtUtcBySteam = new();
+
     private FlagsModuleSettings runtimeSettings = new();
 
     public Shop_Flags(ISwiftlyCore core) : base(core) { }
@@ -37,9 +48,7 @@ public class Shop_Flags : BasePlugin
         shopApi = null;
 
         if (!interfaceManager.HasSharedInterface(ShopCoreInterfaceKey))
-        {
             return;
-        }
 
         try
         {
@@ -60,9 +69,7 @@ public class Shop_Flags : BasePlugin
         }
 
         if (!handlersRegistered)
-        {
             RegisterItemsAndHandlers();
-        }
     }
 
     public override void Load(bool hotReload)
@@ -71,9 +78,7 @@ public class Shop_Flags : BasePlugin
         Core.Event.OnClientDisconnected += OnClientDisconnected;
 
         if (shopApi is not null && !handlersRegistered)
-        {
             RegisterItemsAndHandlers();
-        }
     }
 
     public override void Unload()
@@ -88,9 +93,7 @@ public class Shop_Flags : BasePlugin
     private void RegisterItemsAndHandlers()
     {
         if (shopApi is null)
-        {
             return;
-        }
 
         UnregisterItemsAndHandlers();
 
@@ -99,6 +102,7 @@ public class Shop_Flags : BasePlugin
             TemplateFileName,
             TemplateSectionName
         );
+
         NormalizeConfig(moduleConfig);
         runtimeSettings = moduleConfig.Settings;
 
@@ -111,6 +115,7 @@ public class Shop_Flags : BasePlugin
             moduleConfig = CreateDefaultConfig();
             category = moduleConfig.Settings.Category;
             runtimeSettings = moduleConfig.Settings;
+
             _ = shopApi.SaveModuleConfig(
                 ModulePluginId,
                 moduleConfig,
@@ -124,9 +129,7 @@ public class Shop_Flags : BasePlugin
         foreach (var itemTemplate in moduleConfig.Items)
         {
             if (!TryCreateDefinition(itemTemplate, category, out var definition, out var runtime))
-            {
                 continue;
-            }
 
             if (!shopApi.RegisterItem(definition))
             {
@@ -158,9 +161,7 @@ public class Shop_Flags : BasePlugin
     private void UnregisterItemsAndHandlers()
     {
         if (!handlersRegistered || shopApi is null)
-        {
             return;
-        }
 
         shopApi.OnBeforeItemPurchase -= OnBeforeItemPurchase;
         shopApi.OnItemPurchased -= OnItemPurchased;
@@ -170,9 +171,7 @@ public class Shop_Flags : BasePlugin
         shopApi.OnItemPreview -= OnItemPreview;
 
         foreach (var itemId in registeredItemIds)
-        {
             _ = shopApi.UnregisterItem(itemId);
-        }
 
         registeredItemIds.Clear();
         itemRuntimeById.Clear();
@@ -182,24 +181,16 @@ public class Shop_Flags : BasePlugin
     private void OnBeforeItemPurchase(ShopBeforePurchaseContext context)
     {
         if (!registeredItemIds.Contains(context.Item.Id))
-        {
             return;
-        }
 
         if (!itemRuntimeById.TryGetValue(context.Item.Id, out var runtime))
-        {
             return;
-        }
 
         if (string.IsNullOrWhiteSpace(runtime.RequiredPermission))
-        {
             return;
-        }
 
         if (Core.Permission.PlayerHasPermission(context.Player.SteamID, runtime.RequiredPermission))
-        {
             return;
-        }
 
         var player = context.Player;
         var loc = Core.Translation.GetPlayerLocalizer(player);
@@ -209,9 +200,7 @@ public class Shop_Flags : BasePlugin
     private void OnItemPurchased(IPlayer player, ShopItemDefinition item)
     {
         if (!registeredItemIds.Contains(item.Id))
-        {
             return;
-        }
 
         RunOnMainThread(() => SyncPlayerPermissions(player));
     }
@@ -219,9 +208,7 @@ public class Shop_Flags : BasePlugin
     private void OnItemToggled(IPlayer player, ShopItemDefinition item, bool enabled)
     {
         if (!registeredItemIds.Contains(item.Id))
-        {
             return;
-        }
 
         RunOnMainThread(() => SyncPlayerPermissions(player));
     }
@@ -229,9 +216,7 @@ public class Shop_Flags : BasePlugin
     private void OnItemSold(IPlayer player, ShopItemDefinition item, decimal creditedAmount)
     {
         if (!registeredItemIds.Contains(item.Id))
-        {
             return;
-        }
 
         RunOnMainThread(() => SyncPlayerPermissions(player));
     }
@@ -239,9 +224,7 @@ public class Shop_Flags : BasePlugin
     private void OnItemExpired(IPlayer player, ShopItemDefinition item)
     {
         if (!registeredItemIds.Contains(item.Id))
-        {
             return;
-        }
 
         RunOnMainThread(() => SyncPlayerPermissions(player));
     }
@@ -249,21 +232,15 @@ public class Shop_Flags : BasePlugin
     private void OnItemPreview(IPlayer player, ShopItemDefinition item)
     {
         if (!registeredItemIds.Contains(item.Id))
-        {
             return;
-        }
 
         if (!itemRuntimeById.TryGetValue(item.Id, out var runtime))
-        {
             return;
-        }
 
         RunOnMainThread(() =>
         {
             if (!player.IsValid || player.IsFakeClient)
-            {
                 return;
-            }
 
             player.SendChat(
                 $"{GetPrefix(player)} {Core.Translation.GetPlayerLocalizer(player)["preview.info", item.DisplayName, runtime.GrantedPermission]}"
@@ -278,9 +255,7 @@ public class Shop_Flags : BasePlugin
         {
             var corePrefix = shopApi?.GetShopPrefix(player);
             if (!string.IsNullOrWhiteSpace(corePrefix))
-            {
                 return corePrefix;
-            }
         }
 
         return loc["shop.prefix"];
@@ -292,25 +267,59 @@ public class Shop_Flags : BasePlugin
         {
             var player = Core.PlayerManager.GetPlayer(@event.PlayerId);
             if (player is null || !player.IsValid || player.IsFakeClient)
-            {
                 return;
-            }
 
+            steamByPlayerId[player.PlayerID] = player.SteamID;
+            connectAtUtcBySteam[player.SteamID] = DateTime.UtcNow;
+
+            // Immediate sync
             SyncPlayerPermissions(player);
+
+            // Frequent retry loop for up to 60s
+            ScheduleConnectResync(player, attempt: 1);
+        });
+    }
+
+    private void ScheduleConnectResync(IPlayer player, int attempt)
+    {
+        if (attempt > ConnectResyncAttempts)
+            return;
+
+        if (!player.IsValid || player.IsFakeClient)
+            return;
+
+        var expectedSteam = player.SteamID;
+        var expectedPlayerId = player.PlayerID;
+
+        Core.Scheduler.DelayBySeconds(ConnectResyncDelaySeconds, () =>
+        {
+            RunOnMainThread(() =>
+            {
+                var current = Core.PlayerManager.GetPlayer(expectedPlayerId);
+                if (current is null || !current.IsValid || current.IsFakeClient)
+                    return;
+
+                if (current.SteamID != expectedSteam)
+                    return;
+
+                SyncPlayerPermissions(current);
+                ScheduleConnectResync(current, attempt + 1);
+            });
         });
     }
 
     private void OnClientDisconnected(IOnClientDisconnectedEvent @event)
     {
+        // IMPORTANT FIX:
+        // Do NOT remove flags on disconnect, because ShopCore may not have loaded the temporary item state on reconnect yet.
+        // We'll reconcile on connect once ShopCore state becomes available.
         RunOnMainThread(() =>
         {
-            if (!steamByPlayerId.TryGetValue(@event.PlayerId, out var steamId))
+            if (steamByPlayerId.TryGetValue(@event.PlayerId, out var steamId))
             {
-                return;
+                steamByPlayerId.Remove(@event.PlayerId);
+                // keep connectAtUtcBySteam + activePermissionsBySteam so permissions persist across reconnect
             }
-
-            RemoveTrackedPermissions(steamId);
-            steamByPlayerId.Remove(@event.PlayerId);
         });
     }
 
@@ -319,20 +328,20 @@ public class Shop_Flags : BasePlugin
         foreach (var player in Core.PlayerManager.GetAllValidPlayers())
         {
             if (player.IsFakeClient)
-            {
                 continue;
-            }
+
+            steamByPlayerId[player.PlayerID] = player.SteamID;
+            connectAtUtcBySteam[player.SteamID] = DateTime.UtcNow;
 
             SyncPlayerPermissions(player);
+            ScheduleConnectResync(player, attempt: 1);
         }
     }
 
     private void SyncPlayerPermissions(IPlayer player)
     {
         if (shopApi is null || !player.IsValid || player.IsFakeClient)
-        {
             return;
-        }
 
         steamByPlayerId[player.PlayerID] = player.SteamID;
 
@@ -340,19 +349,13 @@ public class Shop_Flags : BasePlugin
         foreach (var itemId in registeredItemIds)
         {
             if (!shopApi.IsItemEnabled(player, itemId))
-            {
                 continue;
-            }
 
             if (!itemRuntimeById.TryGetValue(itemId, out var runtime))
-            {
                 continue;
-            }
 
             if (string.IsNullOrWhiteSpace(runtime.GrantedPermission))
-            {
                 continue;
-            }
 
             desiredPermissions.Add(runtime.GrantedPermission);
         }
@@ -363,12 +366,11 @@ public class Shop_Flags : BasePlugin
             activePermissionsBySteam[player.SteamID] = activePermissions;
         }
 
-        foreach (var permission in desiredPermissions.ToArray())
+        // Add missing
+        foreach (var permission in desiredPermissions)
         {
             if (activePermissions.Contains(permission))
-            {
                 continue;
-            }
 
             if (!Core.Permission.PlayerHasPermission(player.SteamID, permission))
             {
@@ -384,12 +386,25 @@ public class Shop_Flags : BasePlugin
             activePermissions.Add(permission);
         }
 
+        // Removal gating (critical for temporary items on reconnect)
+        bool withinGrace = false;
+        if (connectAtUtcBySteam.TryGetValue(player.SteamID, out var connectedUtc))
+        {
+            withinGrace = (DateTime.UtcNow - connectedUtc) <= RemovalGraceWindow;
+        }
+
+        // If we currently have active perms BUT ShopCore reports nothing enabled,
+        // do not remove yet during grace window.
+        if (withinGrace && activePermissions.Count > 0 && desiredPermissions.Count == 0)
+        {
+            return;
+        }
+
+        // Remove no-longer-desired
         foreach (var permission in activePermissions.ToArray())
         {
             if (desiredPermissions.Contains(permission))
-            {
                 continue;
-            }
 
             if (Core.Permission.PlayerHasPermission(player.SteamID, permission))
             {
@@ -406,24 +421,18 @@ public class Shop_Flags : BasePlugin
         }
 
         if (activePermissions.Count == 0)
-        {
             activePermissionsBySteam.Remove(player.SteamID);
-        }
     }
 
     private void RemoveTrackedPermissions(ulong steamId)
     {
         if (!activePermissionsBySteam.TryGetValue(steamId, out var permissions))
-        {
             return;
-        }
 
         foreach (var permission in permissions)
         {
             if (!Core.Permission.PlayerHasPermission(steamId, permission))
-            {
                 continue;
-            }
 
             Core.Permission.RemovePermission(steamId, permission);
         }
@@ -434,12 +443,11 @@ public class Shop_Flags : BasePlugin
     private void RemoveAllTrackedPermissions()
     {
         foreach (var steamId in activePermissionsBySteam.Keys.ToArray())
-        {
             RemoveTrackedPermissions(steamId);
-        }
 
         activePermissionsBySteam.Clear();
         steamByPlayerId.Clear();
+        connectAtUtcBySteam.Clear();
     }
 
     private void RunOnMainThread(Action action)
@@ -467,9 +475,7 @@ public class Shop_Flags : BasePlugin
         runtime = default;
 
         if (string.IsNullOrWhiteSpace(itemTemplate.Id))
-        {
             return false;
-        }
 
         var itemId = itemTemplate.Id.Trim();
         if (itemTemplate.Price <= 0)
@@ -501,15 +507,11 @@ public class Shop_Flags : BasePlugin
         }
 
         if (!Enum.TryParse(itemTemplate.Team, ignoreCase: true, out ShopItemTeam team))
-        {
             team = ShopItemTeam.Any;
-        }
 
         TimeSpan? duration = null;
         if (itemTemplate.DurationSeconds > 0)
-        {
             duration = TimeSpan.FromSeconds(itemTemplate.DurationSeconds);
-        }
 
         if (itemType == ShopItemType.Temporary && !duration.HasValue)
         {
@@ -522,9 +524,7 @@ public class Shop_Flags : BasePlugin
 
         decimal? sellPrice = null;
         if (itemTemplate.SellPrice.HasValue && itemTemplate.SellPrice.Value >= 0)
-        {
             sellPrice = itemTemplate.SellPrice.Value;
-        }
 
         definition = new ShopItemDefinition(
             Id: itemId,
@@ -557,15 +557,11 @@ public class Shop_Flags : BasePlugin
                 ? Core.Localizer[key]
                 : Core.Localizer[key, FormatDuration(itemTemplate.DurationSeconds)];
             if (!string.Equals(localized, key, StringComparison.Ordinal))
-            {
                 return localized;
-            }
         }
 
         if (!string.IsNullOrWhiteSpace(itemTemplate.DisplayName))
-        {
             return itemTemplate.DisplayName.Trim();
-        }
 
         return itemTemplate.Id.Trim();
     }
@@ -573,9 +569,7 @@ public class Shop_Flags : BasePlugin
     private static string FormatDuration(int totalSeconds)
     {
         if (totalSeconds <= 0)
-        {
             return "0 Seconds";
-        }
 
         var ts = TimeSpan.FromSeconds(totalSeconds);
         if (ts.TotalHours >= 1)
