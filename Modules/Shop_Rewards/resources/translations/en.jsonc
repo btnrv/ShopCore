@@ -5,5 +5,7 @@
     "reward.assist": "You got [lime]{0}[default] credits for an assist.",
     "reward.mvp": "You got [lime]{0}[default] credits for being the mvp.",
     "reward.round_won": "You got [lime]{0}[default] credits for winning the round.",
-    "reward.match_won": "You got [lime]{0}[default] credits for winning the match."
+    "reward.match_won": "You got [lime]{0}[default] credits for winning the match.",
+    "module.disabled": "Rewards are [red]disabled[default]. Minimum [lime]{0}[default] players to enable it.",
+    "module.disabled.warmup": "Rewards are [red]disabled[default] during warmup."
 }
