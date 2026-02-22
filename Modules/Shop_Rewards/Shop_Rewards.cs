@@ -15,7 +15,7 @@ namespace ShopCore;
     Id = "Shop_Rewards",
     Name = "Shop Rewards",
     Author = "T3Marius",
-    Version = "1.0.0",
+    Version = "1.0.1",
     Description = "ShopCore module with rewards system"
 )]
 public class Shop_Rewards : BasePlugin
@@ -82,6 +82,17 @@ public class Shop_Rewards : BasePlugin
             return HookResult.Continue;
         }
 
+        if (IsWarmupPeriod() && config.DisableInWarmup)
+        {
+            return HookResult.Continue;
+        }
+
+        List<IPlayer> onlinePlayers = Core.PlayerManager.GetAllValidPlayers().ToList();
+        if (onlinePlayers.Count < config.MinPlayers)
+        {
+            return HookResult.Continue;
+        }
+
         if (config.MatchWon <= 0 || !TryResolveWinnerTeam(lastRoundWinnerTeam, out var winnerTeam))
         {
             return HookResult.Continue;
@@ -96,6 +107,52 @@ public class Shop_Rewards : BasePlugin
         return HookResult.Continue;
     }
 
+    [GameEventHandler(HookMode.Post)]
+    public HookResult OnRoundStart(EventRoundStart e)
+    {
+        List<IPlayer> onlinePlayers = Core.PlayerManager.GetAllValidPlayers().ToList();
+
+        if (IsWarmupPeriod() && config.DisableInWarmup)
+        {
+            foreach (var player in onlinePlayers)
+            {
+                var loc = Core.Translation.GetPlayerLocalizer(player);
+                var prefix = loc["shop.prefix"];
+                if (config.UseCorePrefix)
+                {
+                    var corePrefix = shopApi?.GetShopPrefix(player);
+                    if (!string.IsNullOrWhiteSpace(corePrefix))
+                    {
+                        prefix = corePrefix;
+                    }
+                }
+                player.SendChat($"{prefix} + {loc["module.disabled.warmup"]}");
+            }
+            return HookResult.Continue;
+        }
+        if (onlinePlayers.Count < config.MinPlayers)
+        {
+            foreach (var player in onlinePlayers)
+            {
+                var loc = Core.Translation.GetPlayerLocalizer(player);
+                var prefix = loc["shop.prefix"];
+                if (config.UseCorePrefix)
+                {
+                    var corePrefix = shopApi?.GetShopPrefix(player);
+                    if (!string.IsNullOrWhiteSpace(corePrefix))
+                    {
+                        prefix = corePrefix;
+                    }
+                }
+
+                player.SendChat($"{prefix} + {loc["module.disabled", config.MinPlayers]}");
+            }
+            return HookResult.Continue;
+        }
+
+        return HookResult.Continue;
+    }
+
     [GameEventHandler(HookMode.Pre)]
     public HookResult OnRoundMvp(EventRoundMvp e)
     {
@@ -105,6 +162,17 @@ public class Shop_Rewards : BasePlugin
         }
 
         if (shopApi is null)
+        {
+            return HookResult.Continue;
+        }
+
+        if (IsWarmupPeriod() && config.DisableInWarmup)
+        {
+            return HookResult.Continue;
+        }
+
+        List<IPlayer> onlinePlayers = Core.PlayerManager.GetAllValidPlayers().ToList();
+        if (onlinePlayers.Count < config.MinPlayers)
         {
             return HookResult.Continue;
         }
@@ -128,6 +196,17 @@ public class Shop_Rewards : BasePlugin
             return HookResult.Continue;
         }
 
+        if (IsWarmupPeriod() && config.DisableInWarmup)
+        {
+            return HookResult.Continue;
+        }
+
+        List<IPlayer> onlinePlayers = Core.PlayerManager.GetAllValidPlayers().ToList();
+        if (onlinePlayers.Count < config.MinPlayers)
+        {
+            return HookResult.Continue;
+        }
+
         if (config.RoundWon <= 0 || !TryResolveWinnerTeam(e.Winner, out var winnerTeam))
         {
             return HookResult.Continue;
@@ -146,6 +225,17 @@ public class Shop_Rewards : BasePlugin
     public HookResult OnPlayerDeath(EventPlayerDeath e)
     {
         if (shopApi is null)
+        {
+            return HookResult.Continue;
+        }
+
+        if (IsWarmupPeriod() && config.DisableInWarmup)
+        {
+            return HookResult.Continue;
+        }
+
+        List<IPlayer> onlinePlayers = Core.PlayerManager.GetAllValidPlayers().ToList();
+        if (onlinePlayers.Count < config.MinPlayers)
         {
             return HookResult.Continue;
         }
@@ -231,10 +321,16 @@ public class Shop_Rewards : BasePlugin
 
         player.SendChat($"{prefix} {loc[key, rewardConfig]}");
     }
+    private bool IsWarmupPeriod()
+    {
+        return Core.EntitySystem.GetGameRules()?.WarmupPeriod ?? false;
+    }
 }
 
 internal sealed class RewardsModuleConfig
 {
+    public int MinPlayers { get; set; } = 4;
+    public bool DisableInWarmup { get; set; } = true;
     public bool UseCorePrefix { get; set; } = true;
     public int Kill { get; set; } = 2;
     public int Headshot { get; set; } = 5;
