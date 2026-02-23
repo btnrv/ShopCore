@@ -29,7 +29,10 @@ public partial class ShopCore
             return;
         }
 
-        Core.MenusAPI.OpenMenuForPlayer(player, BuildBuyCategoryMenu(player));
+        _ = RunAfterCookieWarmup(player, current =>
+        {
+            Core.MenusAPI.OpenMenuForPlayer(current, BuildBuyCategoryMenu(current));
+        });
     }
 
     private void HandleOpenInventoryMenuCommand(ICommandContext context)
@@ -40,7 +43,10 @@ public partial class ShopCore
             return;
         }
 
-        Core.MenusAPI.OpenMenuForPlayer(player, BuildInventoryCategoryMenu(player));
+        _ = RunAfterCookieWarmup(player, current =>
+        {
+            Core.MenusAPI.OpenMenuForPlayer(current, BuildInventoryCategoryMenu(current));
+        });
     }
 
     private void HandleShowCreditsCommand(ICommandContext context)
@@ -75,7 +81,10 @@ public partial class ShopCore
         buyButton.Click += (sender, args) =>
         {
             var parentMenu = (sender as IMenuOption)?.Menu;
-            Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildBuyCategoryMenu(args.Player, parentMenu));
+            _ = RunAfterCookieWarmup(args.Player, current =>
+            {
+                Core.MenusAPI.OpenMenuForPlayer(current, BuildBuyCategoryMenu(current, parentMenu));
+            });
             return ValueTask.CompletedTask;
         };
         _ = builder.AddOption(buyButton);
@@ -84,7 +93,10 @@ public partial class ShopCore
         inventoryButton.Click += (sender, args) =>
         {
             var parentMenu = (sender as IMenuOption)?.Menu;
-            Core.MenusAPI.OpenMenuForPlayer(args.Player, BuildInventoryCategoryMenu(args.Player, parentMenu));
+            _ = RunAfterCookieWarmup(args.Player, current =>
+            {
+                Core.MenusAPI.OpenMenuForPlayer(current, BuildInventoryCategoryMenu(current, parentMenu));
+            });
             return ValueTask.CompletedTask;
         };
         _ = builder.AddOption(inventoryButton);

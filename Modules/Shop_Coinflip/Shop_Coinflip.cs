@@ -214,18 +214,18 @@ public class Shop_Coinflip : BasePlugin
             cooldownBySteam[player.SteamID] = DateTimeOffset.UtcNow.AddSeconds(settings.BetCooldownSeconds);
         }
 
+        var balanceAfterBet = shopApi.GetCredits(player);
         var won = Random.Shared.NextDouble() <= Math.Clamp(settings.WinChance, 0.0, 1.0);
         if (won)
         {
             var reward = Math.Max(1, (int)Math.Round(bet * settings.WinMultiplier, MidpointRounding.AwayFromZero));
             _ = shopApi.AddCredits(player, reward);
-            var balance = shopApi.GetCredits(player);
+            var balance = balanceAfterBet + reward;
             Reply(context, "coinflip.won", reward, balance);
             return;
         }
 
-        var lostBalance = shopApi.GetCredits(player);
-        Reply(context, "coinflip.lost", bet, lostBalance);
+        Reply(context, "coinflip.lost", bet, balanceAfterBet);
     }
 
     private void Reply(ICommandContext context, string key, params object[] args)
@@ -360,4 +360,3 @@ internal sealed class CoinflipModuleConfig
     public double WinChance { get; set; } = 0.5;
     public float WinMultiplier { get; set; } = 2.0f;
 }
-

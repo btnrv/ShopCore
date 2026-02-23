@@ -1,0 +1,6 @@
+{
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "module.quiz.question": "Coz: [lightyellow]{0}[default] = ? Odul: [lime]{1}[default] kredi.",
+    "module.quiz.winner": "[lightyellow]{0}[default] dogru cevabi verdi ve [lime]{1}[default] kredi kazandi. Bakiye: [lime]{2}[default].",
+    "module.quiz.reward_failed": "Dogru cevap kabul edildi ancak odul [lightred]odenemedi[default]. Lutfen yoneticiye bildirin."
+}

@@ -1,0 +1,6 @@
+{
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "module.quiz.question": "计算题: [lightyellow]{0}[default] = ? 奖励: [lime]{1}[default] 积分。",
+    "module.quiz.winner": "[lightyellow]{0}[default] 回答正确，获得 [lime]{1}[default] 积分。余额: [lime]{2}[default]。",
+    "module.quiz.reward_failed": "正确答案已接受，但奖励 [lightred]发放失败[default]。请联系管理员。"
+}

@@ -1,0 +1,10 @@
+{
+  "shop.prefix": "[gold]\u2605[red] [Store][default]",
+
+  "item.temporary.name": "{0} ({1})",
+  "item.permanent.name": "{0} (Kalici)",
+
+  "error.permission": "[lightred]{0}[default] satin almak icin [lightred]{1}[default] izni gerekiyor.",
+  "preview.started": "[lightyellow]{0}[default] onizlemesi [lightyellow]{1}[default] sn aktif. Gormek icin eslesen silahi kusan veya yere dusenden al.",
+  "preview.cooldown": "Baska bir silah kaplamasi onizlemeden once [lightyellow]{0}[default] sn bekle."
+}

@@ -30,8 +30,10 @@
   "shop.credits.gift.sender_success": "[lime]{1}[default] kişisine [lime]{0}[default] kredi hediye ettiniz. Bakiye: [lime]{2}[default].",
   "shop.credits.gift.receiver_success": "[lime]{0}[default] kişisinden [lime]{1}[default] kredi aldınız.",
 
-  "shop.credits.admin.give.usage": "Kullanım: [lightyellow]givecredits <hedef> <miktar>[default]",
+  "shop.credits.admin.give.usage": "Kullanım: [lightyellow]givecredits <hedef|secici|a,b> <miktar>[default]",
   "shop.credits.admin.give.success": "[lime]{1}[default] hesabına [lime]{0}[default] kredi eklendi. Yeni bakiye: [lime]{2}[default].",
+  "shop.credits.admin.give.multi_success": "[lime]{1}[default] oyuncuya kişi başı [lime]{0}[default] kredi eklendi. Toplam dağıtılan: [lime]{2}[default].",
+  "shop.credits.admin.give.multi_partial": "[lime]{1}[default] oyuncuya kişi başı [lime]{0}[default] kredi eklendi, [lightred]{2}[default] başarısız. Toplam dağıtılan: [lime]{3}[default].",
   "shop.credits.admin.give.notified_target": "[lime]{0}[default] size [lime]{1}[default] kredi verdi. Bakiye: [lime]{2}[default].",
 
   "shop.credits.admin.remove.usage": "Kullanım: [lightyellow]removecredits <hedef> <miktar>[default]",

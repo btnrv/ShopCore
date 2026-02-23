@@ -1,0 +1,10 @@
+{
+  "shop.prefix": "[gold]\u2605[red] [Store][default]",
+
+  "item.temporary.name": "{0} ({1})",
+  "item.permanent.name": "{0} (永久)",
+
+  "error.permission": "购买 [lightred]{0}[default] 需要权限 [lightred]{1}[default]。",
+  "preview.started": "[lightyellow]{0}[default] 预览已启用 [lightyellow]{1}[default] 秒。切换到对应武器或拾取对应武器即可查看效果。",
+  "preview.cooldown": "请等待 [lightyellow]{0}[default] 秒后再预览其他武器皮肤。"
+}

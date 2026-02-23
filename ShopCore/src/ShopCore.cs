@@ -19,6 +19,9 @@ namespace ShopCore;
 )]
 public partial class ShopCore : BasePlugin
 {
+    private const float CookieWarmupGraceSeconds = 1.0f;
+    private const float CookieWarmupNoticeCooldownSeconds = 0.75f;
+
     public const string ShopCoreInterfaceKey = "ShopCore.API.v2";
     public const string PlayerCookiesInterfaceKey = "Cookies.Player.v1";
     public const string PlayerCookiesInterfaceKeyLegacy = "Cookies.Player.V1";
@@ -36,6 +39,9 @@ public partial class ShopCore : BasePlugin
 
     public IPlayerCookiesAPIv1 playerCookies = null!;
     public IEconomyAPIv1 economyApi = null!;
+
+    private readonly Dictionary<ulong, DateTimeOffset> cookieWarmupUntilBySteamId = [];
+    private readonly Dictionary<ulong, DateTimeOffset> cookieWarmupNoticeCooldownBySteamId = [];
 
     public override void ConfigureSharedInterface(IInterfaceManager interfaceManager)
     {
@@ -314,6 +320,137 @@ public partial class ShopCore : BasePlugin
                 return key;
             }
         }
+    }
+
+    internal void MarkCookieWarmupPending(ulong steamId)
+    {
+        if (steamId == 0)
+        {
+            return;
+        }
+
+        cookieWarmupUntilBySteamId[steamId] = DateTimeOffset.UtcNow.AddSeconds(CookieWarmupGraceSeconds);
+    }
+
+    internal void ClearCookieWarmupState(ulong steamId)
+    {
+        if (steamId == 0)
+        {
+            return;
+        }
+
+        _ = cookieWarmupUntilBySteamId.Remove(steamId);
+        _ = cookieWarmupNoticeCooldownBySteamId.Remove(steamId);
+    }
+
+    internal bool RunAfterCookieWarmup(IPlayer player, Action<IPlayer> action, bool notifyIfDelayed = true)
+    {
+        if (player is null || !player.IsValid || player.IsFakeClient)
+        {
+            return false;
+        }
+
+        var steamId = player.SteamID;
+        if (!TryGetRemainingCookieWarmupDelay(steamId, out var delaySeconds))
+        {
+            action(player);
+            return true;
+        }
+
+        if (notifyIfDelayed)
+        {
+            MaybeNotifyCookieWarmupDelay(player);
+        }
+
+        var playerId = player.PlayerID;
+        Core.Scheduler.DelayBySeconds(delaySeconds, () =>
+        {
+            try
+            {
+                var current = Core.PlayerManager.GetPlayer(playerId);
+                if (current is null || !current.IsValid || current.IsFakeClient)
+                {
+                    return;
+                }
+
+                if (steamId != 0 && current.SteamID != steamId)
+                {
+                    return;
+                }
+
+                action(current);
+            }
+            catch (Exception ex)
+            {
+                Core.Logger.LogWarning(ex, "Failed to execute delayed cookie-warmup action for playerId={PlayerId}.", playerId);
+            }
+        });
+
+        return false;
+    }
+
+    internal void FlushPlayerCookiesAsync(ulong steamId)
+    {
+        if (steamId == 0 || playerCookies is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                playerCookies.Save((long)steamId);
+            }
+            catch (Exception ex)
+            {
+                Core.Logger.LogWarning(ex, "Background cookie flush failed for steamId={SteamId}.", steamId);
+            }
+        });
+    }
+
+    private bool TryGetRemainingCookieWarmupDelay(ulong steamId, out float delaySeconds)
+    {
+        delaySeconds = 0f;
+        if (steamId == 0)
+        {
+            return false;
+        }
+
+        if (!cookieWarmupUntilBySteamId.TryGetValue(steamId, out var readyAt))
+        {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (readyAt <= now)
+        {
+            _ = cookieWarmupUntilBySteamId.Remove(steamId);
+            _ = cookieWarmupNoticeCooldownBySteamId.Remove(steamId);
+            return false;
+        }
+
+        var remaining = readyAt - now;
+        delaySeconds = Math.Max(0.05f, (float)remaining.TotalSeconds);
+        return true;
+    }
+
+    private void MaybeNotifyCookieWarmupDelay(IPlayer player)
+    {
+        var steamId = player.SteamID;
+        if (steamId == 0)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (cookieWarmupNoticeCooldownBySteamId.TryGetValue(steamId, out var cooldownUntil) && cooldownUntil > now)
+        {
+            return;
+        }
+
+        cookieWarmupNoticeCooldownBySteamId[steamId] = now.AddSeconds(CookieWarmupNoticeCooldownSeconds);
+        SendChatRaw(player, "Loading shop data...");
     }
 
     private string TryGetChatPrefix(IPlayer player)

@@ -622,7 +622,6 @@ internal sealed class ShopCoreApiV2 : IShopCoreApiV2
                 plugin.playerCookies.Unset(player, ExpireAtKey(item.Id));
             }
 
-            plugin.playerCookies.Save(player);
             OnItemToggled?.Invoke(player, item, true);
         }
 
@@ -837,8 +836,6 @@ internal sealed class ShopCoreApiV2 : IShopCoreApiV2
         plugin.playerCookies.Set(player, OwnedKey(item.Id), false);
         plugin.playerCookies.Set(player, EnabledKey(item.Id), false);
         plugin.playerCookies.Unset(player, ExpireAtKey(item.Id));
-        plugin.playerCookies.Save(player);
-
         plugin.economyApi.AddPlayerBalance(player.SteamID, WalletKind, sellAmount);
 
         if (wasEnabled)
@@ -905,7 +902,6 @@ internal sealed class ShopCoreApiV2 : IShopCoreApiV2
         {
             owned = true;
             plugin.playerCookies.Set(player, OwnedKey(item.Id), true);
-            plugin.playerCookies.Save(player);
         }
 
         if (!owned)
@@ -920,8 +916,6 @@ internal sealed class ShopCoreApiV2 : IShopCoreApiV2
             plugin.playerCookies.Set(player, OwnedKey(item.Id), false);
             plugin.playerCookies.Set(player, EnabledKey(item.Id), false);
             plugin.playerCookies.Unset(player, ExpireAtKey(item.Id));
-            plugin.playerCookies.Save(player);
-
             if (wasEnabled)
             {
                 OnItemToggled?.Invoke(player, item, false);
@@ -981,7 +975,6 @@ internal sealed class ShopCoreApiV2 : IShopCoreApiV2
             }
         }
 
-        plugin.playerCookies.Save(player);
         plugin.SendLocalizedChat(
             player,
             enabled ? "shop.item.equipped" : "shop.item.unequipped",
@@ -1583,5 +1576,4 @@ internal sealed class ShopCoreApiV2 : IShopCoreApiV2
         }
     }
 }
-
 

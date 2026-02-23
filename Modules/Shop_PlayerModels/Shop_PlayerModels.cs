@@ -29,6 +29,7 @@ public class Shop_PlayerModels : BasePlugin
     private const float PreviewDurationSeconds = 8f;
     private const float PreviewDistance = 75f;
     private const float PreviewRotateIntervalSeconds = 0.05f;
+    private const float SpawnEquippedModelResyncDelaySeconds = 0.35f;
 
     private IShopCoreApiV2? shopApi;
     private bool handlersRegistered;
@@ -128,6 +129,19 @@ public class Shop_PlayerModels : BasePlugin
             ApplyConfiguredOrDefaultModel(player);
         });
 
+        Core.Scheduler.DelayBySeconds(SpawnEquippedModelResyncDelaySeconds, () =>
+        {
+            Core.Scheduler.NextWorldUpdate(() =>
+            {
+                if (player is null || !player.IsValid || player.IsFakeClient)
+                {
+                    return;
+                }
+
+                ApplyEquippedModelOnly(player);
+            });
+        });
+
         return HookResult.Continue;
     }
 
@@ -143,14 +157,20 @@ public class Shop_PlayerModels : BasePlugin
             e.AddItem(runtime.ModelPath);
         }
 
-        if (!string.IsNullOrWhiteSpace(runtimeSettings.DefaultTModel))
+        foreach (var modelPath in runtimeSettings.DefaultTModel)
         {
-            e.AddItem(runtimeSettings.DefaultTModel);
+            if (!string.IsNullOrWhiteSpace(modelPath))
+            {
+                e.AddItem(modelPath);
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(runtimeSettings.DefaultCtModel))
+        foreach (var modelPath in runtimeSettings.DefaultCtModel)
         {
-            e.AddItem(runtimeSettings.DefaultCtModel);
+            if (!string.IsNullOrWhiteSpace(modelPath))
+            {
+                e.AddItem(modelPath);
+            }
         }
     }
 
@@ -355,6 +375,21 @@ public class Shop_PlayerModels : BasePlugin
         ResetToTeamDefaultModel(player);
     }
 
+    private void ApplyEquippedModelOnly(IPlayer player)
+    {
+        if (shopApi is null || player is null || !player.IsValid || player.IsFakeClient)
+        {
+            return;
+        }
+
+        if (!TryGetEnabledRuntime(player, out var runtime))
+        {
+            return;
+        }
+
+        ApplyModel(player, runtime.ModelPath);
+    }
+
     private bool TryGetEnabledRuntime(IPlayer player, out PlayerModelItemRuntime runtime)
     {
         runtime = default;
@@ -399,15 +434,30 @@ public class Shop_PlayerModels : BasePlugin
         var teamNum = player.Controller.TeamNum;
         if (teamNum == (int)Team.T)
         {
-            return runtimeSettings.DefaultTModel;
+            return ResolveRandomModelFromPool(runtimeSettings.DefaultTModel);
         }
 
         if (teamNum == (int)Team.CT)
         {
-            return runtimeSettings.DefaultCtModel;
+            return ResolveRandomModelFromPool(runtimeSettings.DefaultCtModel);
         }
 
         return string.Empty;
+    }
+
+    private static string ResolveRandomModelFromPool(List<string>? modelPool)
+    {
+        if (modelPool is null || modelPool.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        if (modelPool.Count == 1)
+        {
+            return modelPool[0];
+        }
+
+        return modelPool[Random.Shared.Next(modelPool.Count)];
     }
 
     private void ApplyModel(IPlayer player, string modelPath)
@@ -923,13 +973,28 @@ public class Shop_PlayerModels : BasePlugin
             ? DefaultCategory
             : config.Settings.Category.Trim();
 
-        config.Settings.DefaultTModel = string.IsNullOrWhiteSpace(config.Settings.DefaultTModel)
-            ? "characters/models/tm_phoenix/tm_phoenix.vmdl"
-            : config.Settings.DefaultTModel.Trim();
+        config.Settings.DefaultTModel = NormalizeModelPool(config.Settings.DefaultTModel);
+        config.Settings.DefaultCtModel = NormalizeModelPool(config.Settings.DefaultCtModel);
+    }
 
-        config.Settings.DefaultCtModel = string.IsNullOrWhiteSpace(config.Settings.DefaultCtModel)
-            ? "characters/models/ctm_sas/ctm_sas.vmdl"
-            : config.Settings.DefaultCtModel.Trim();
+    private static List<string> NormalizeModelPool(List<string>? models)
+    {
+        var normalized = new List<string>();
+
+        if (models is not null)
+        {
+            foreach (var model in models)
+            {
+                if (string.IsNullOrWhiteSpace(model))
+                {
+                    continue;
+                }
+
+                normalized.Add(model.Trim());
+            }
+        }
+
+        return normalized;
     }
 
     private static PlayerModelsModuleConfig CreateDefaultConfig()
@@ -939,8 +1004,8 @@ public class Shop_PlayerModels : BasePlugin
             Settings = new PlayerModelsModuleSettings
             {
                 Category = DefaultCategory,
-                DefaultTModel = "characters/models/tm_phoenix/tm_phoenix.vmdl",
-                DefaultCtModel = "characters/models/ctm_sas/ctm_sas.vmdl",
+                DefaultTModel = ["characters/models/tm_phoenix/tm_phoenix.vmdl"],
+                DefaultCtModel = ["characters/models/ctm_sas/ctm_sas.vmdl"],
                 RotatePreviewModel = true
             },
             Items =
@@ -999,8 +1064,8 @@ internal sealed class PlayerModelsModuleSettings
 {
     public bool UseCorePrefix { get; set; } = true;
     public string Category { get; set; } = "Visuals/Player Models";
-    public string DefaultTModel { get; set; } = "characters/models/tm_phoenix/tm_phoenix.vmdl";
-    public string DefaultCtModel { get; set; } = "characters/models/ctm_sas/ctm_sas.vmdl";
+    public List<string> DefaultTModel { get; set; } = [];
+    public List<string> DefaultCtModel { get; set; } = [];
     public bool RotatePreviewModel { get; set; } = true;
 }
 

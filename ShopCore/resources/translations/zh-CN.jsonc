@@ -32,8 +32,10 @@
   "shop.credits.gift.sender_success": "你向 [lime]{1}[default] 赠送了 [lime]{0}[default] 积分。余额：[lime]{2}[default]。",
   "shop.credits.gift.receiver_success": "你收到了来自 [lime]{0}[default] 的 [lime]{1}[default] 积分。",
 
-  "shop.credits.admin.give.usage": "用法：[lightyellow]givecredits <目标> <数量>[default]",
+  "shop.credits.admin.give.usage": "用法：[lightyellow]givecredits <目标|选择器|a,b> <数量>[default]",
   "shop.credits.admin.give.success": "已向 [lime]{1}[default] 添加 [lime]{0}[default] 积分。新余额：[lime]{2}[default]。",
+  "shop.credits.admin.give.multi_success": "已向 [lime]{1}[default] 名玩家各添加 [lime]{0}[default] 积分。总发放：[lime]{2}[default]。",
+  "shop.credits.admin.give.multi_partial": "已向 [lime]{1}[default] 名玩家各添加 [lime]{0}[default] 积分，[lightred]{2}[default] 名失败。总发放：[lime]{3}[default]。",
   "shop.credits.admin.give.notified_target": "[lime]{0}[default] 给了你 [lime]{1}[default] 积分。余额：[lime]{2}[default]。",
 
   "shop.credits.admin.remove.usage": "用法：[lightyellow]removecredits <目标> <数量>[default]",

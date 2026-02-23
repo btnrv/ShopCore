@@ -1,0 +1,6 @@
+{
+    "shop.prefix": "[gold]\u2605[red] [Store][default]",
+    "module.quiz.question": "Solve: [lightyellow]{0}[default] = ? Reward: [lime]{1}[default] credits.",
+    "module.quiz.winner": "[lightyellow]{0}[default] answered correctly and won [lime]{1}[default] credits. Balance: [lime]{2}[default].",
+    "module.quiz.reward_failed": "Correct answer accepted, but the reward [lightred]could not be paid[default]. Please contact an admin."
+}

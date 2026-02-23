@@ -4,6 +4,8 @@
     "reward.headshot": "你因爆头获得了 [lime]{0}[default] 积分。",
     "reward.assist": "你因助攻获得了 [lime]{0}[default] 积分。",
     "reward.mvp": "你因成为MVP获得了 [lime]{0}[default] 积分。",
+    "reward.playtime": "你因在线时长获得了 [lime]{0}[default] 积分。",
+    "reward.name_bonus": "你因昵称包含 '[lightblue]{1}[default]' 获得了 [lime]{0}[default] 积分。",
     "reward.round_won": "你因赢得回合获得了 [lime]{0}[default] 积分。",
     "reward.match_won": "你因赢得比赛获得了 [lime]{0}[default] 积分。"
 }

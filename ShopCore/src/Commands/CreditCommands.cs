@@ -55,13 +55,15 @@ public partial class ShopCore
             return;
         }
 
+        var senderBalanceBefore = shopApi.GetCredits(sender);
+
         if (!shopApi.SubtractCredits(sender, amount) || !shopApi.AddCredits(target, amount))
         {
             ReplyCommand(context, "shop.error.invalid_amount", "gift");
             return;
         }
 
-        var senderBalance = shopApi.GetCredits(sender);
+        var senderBalance = senderBalanceBefore - amount;
         ReplyCommand(context, "shop.credits.gift.sender_success", amount, GetPlayerDisplayName(target), senderBalance);
 
         if (Settings.Credits.Transfer.NotifyReceiver && sender.PlayerID != target.PlayerID)
@@ -78,32 +80,69 @@ public partial class ShopCore
             return;
         }
 
-        if (!TryResolveTarget(context, context.Args[0], out var target))
-        {
-            ReplyCommand(context, "shop.credits.target_not_found", context.Args[0]);
-            return;
-        }
-
         if (!TryParseCreditsAmount(context.Args[1], out var amount))
         {
             ReplyCommand(context, "shop.credits.amount_invalid", context.Args[1]);
             return;
         }
 
-        if (!shopApi.AddCredits(target, amount))
+        if (!TryResolveTargets(context, context.Args[0], out var targets))
+        {
+            ReplyCommand(context, "shop.credits.target_not_found", context.Args[0]);
+            return;
+        }
+
+        var issuerName = context.Sender is IPlayer sender ? GetPlayerDisplayName(sender) : "Console";
+        var successCount = 0;
+        var failedCount = 0;
+        IPlayer? lastSuccessfulTarget = null;
+        decimal lastSuccessfulBalance = 0m;
+
+        foreach (var target in targets)
+        {
+            var targetBalanceBefore = shopApi.GetCredits(target);
+            if (!shopApi.AddCredits(target, amount))
+            {
+                failedCount++;
+                continue;
+            }
+
+            successCount++;
+            lastSuccessfulTarget = target;
+            lastSuccessfulBalance = targetBalanceBefore + amount;
+
+            if (Settings.Credits.AdminAdjustments.NotifyTargetPlayer)
+            {
+                SendLocalizedChat(target, "shop.credits.admin.give.notified_target", issuerName, amount, targetBalanceBefore + amount);
+            }
+        }
+
+        if (successCount <= 0)
         {
             ReplyCommand(context, "shop.error.invalid_amount", amount);
             return;
         }
 
-        var targetBalance = shopApi.GetCredits(target);
-        ReplyCommand(context, "shop.credits.admin.give.success", amount, GetPlayerDisplayName(target), targetBalance);
-
-        if (Settings.Credits.AdminAdjustments.NotifyTargetPlayer)
+        if (successCount == 1 && failedCount == 0 && lastSuccessfulTarget is not null)
         {
-            var issuerName = context.Sender is IPlayer sender ? GetPlayerDisplayName(sender) : "Console";
-            SendLocalizedChat(target, "shop.credits.admin.give.notified_target", issuerName, amount, targetBalance);
+            ReplyCommand(
+                context,
+                "shop.credits.admin.give.success",
+                amount,
+                GetPlayerDisplayName(lastSuccessfulTarget),
+                lastSuccessfulBalance
+            );
+            return;
         }
+
+        var totalDistributed = (long)amount * successCount;
+        if (failedCount == 0)
+        {
+            ReplyCommand(context, "shop.credits.admin.give.multi_success", amount, successCount, totalDistributed);
+            return;
+        }
+
+        ReplyCommand(context, "shop.credits.admin.give.multi_partial", amount, successCount, failedCount, totalDistributed);
     }
 
     private void HandleAdminRemoveCreditsCommand(ICommandContext context)
@@ -156,7 +195,7 @@ public partial class ShopCore
             return;
         }
 
-        var targetBalance = shopApi.GetCredits(target);
+        var targetBalance = currentBalance - removeAmount;
         ReplyCommand(context, "shop.credits.admin.remove.success", removeAmount, GetPlayerDisplayName(target), targetBalance);
 
         if (Settings.Credits.AdminAdjustments.NotifyTargetPlayer)
@@ -268,6 +307,71 @@ public partial class ShopCore
         if (partialMatches.Count == 1)
         {
             target = partialMatches[0];
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryResolveTargets(ICommandContext context, string input, out List<IPlayer> targets)
+    {
+        targets = [];
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return false;
+        }
+
+        static void AddDistinct(List<IPlayer> list, IPlayer player)
+        {
+            if (list.Any(p => p.PlayerID == player.PlayerID))
+            {
+                return;
+            }
+
+            list.Add(player);
+        }
+
+        if (input.Contains(',') || input.Contains(';'))
+        {
+            var tokens = input.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var token in tokens)
+            {
+                if (!TryResolveTarget(context, token, out var tokenTarget))
+                {
+                    targets.Clear();
+                    return false;
+                }
+
+                AddDistinct(targets, tokenTarget);
+            }
+
+            return targets.Count > 0;
+        }
+
+        if (context.Sender is IPlayer sender && sender.IsValid)
+        {
+            var matches = Core.PlayerManager
+                .FindTargettedPlayers(sender, input, TargetSearchMode.NoBots | TargetSearchMode.IncludeSelf)
+                .Where(static p => p.IsValid && !p.IsFakeClient)
+                .ToList();
+
+            if (matches.Count > 0)
+            {
+                foreach (var match in matches)
+                {
+                    AddDistinct(targets, match);
+                }
+
+                if (targets.Count > 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        if (TryResolveTarget(context, input, out var singleTarget))
+        {
+            targets.Add(singleTarget);
             return true;
         }
 

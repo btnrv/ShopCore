@@ -4,6 +4,8 @@
     "reward.headshot": "You got [lime]{0}[default] credits for a headshot.",
     "reward.assist": "You got [lime]{0}[default] credits for an assist.",
     "reward.mvp": "You got [lime]{0}[default] credits for being the mvp.",
+    "reward.playtime": "You got [lime]{0}[default] credits for play time.",
+    "reward.name_bonus": "You received [lime]{0}[default] credits for having '[lightblue]{1}[default]' in your nickname.",
     "reward.round_won": "You got [lime]{0}[default] credits for winning the round.",
     "reward.match_won": "You got [lime]{0}[default] credits for winning the match.",
     "module.disabled": "Rewards are [red]disabled[default]. Minimum [lime]{0}[default] players to enable it.",

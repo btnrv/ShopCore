@@ -4,6 +4,8 @@
     "reward.headshot": "Kafa vuruşu için [lime]{0}[default] kredi aldınız.",
     "reward.assist": "Asist için [lime]{0}[default] kredi aldınız.",
     "reward.mvp": "MVP olduğunuz için [lime]{0}[default] kredi aldınız.",
+    "reward.playtime": "Oyun süresi için [lime]{0}[default] kredi aldınız.",
+    "reward.name_bonus": "Takma adınızda '[lightblue]{1}[default]' bulunduğu için [lime]{0}[default] kredi aldınız.",
     "reward.round_won": "Raunt kazandığınız için [lime]{0}[default] kredi aldınız.",
     "reward.match_won": "Maç kazandığınız için [lime]{0}[default] kredi aldınız."
 }

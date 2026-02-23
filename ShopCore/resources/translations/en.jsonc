@@ -32,8 +32,10 @@
   "shop.credits.gift.sender_success": "You gifted [lime]{0}[default] credits to [lime]{1}[default]. Balance: [lime]{2}[default].",
   "shop.credits.gift.receiver_success": "You received [lime]{1}[default] credits from [lime]{0}[default].",
 
-  "shop.credits.admin.give.usage": "Usage: [lightyellow]givecredits <target> <amount>[default]",
+  "shop.credits.admin.give.usage": "Usage: [lightyellow]givecredits <target|selector|a,b> <amount>[default]",
   "shop.credits.admin.give.success": "Added [lime]{0}[default] credits to [lime]{1}[default]. New balance: [lime]{2}[default].",
+  "shop.credits.admin.give.multi_success": "Added [lime]{0}[default] credits to [lime]{1}[default] players. Total distributed: [lime]{2}[default].",
+  "shop.credits.admin.give.multi_partial": "Added [lime]{0}[default] credits to [lime]{1}[default] players, [lightred]{2}[default] failed. Total distributed: [lime]{3}[default].",
   "shop.credits.admin.give.notified_target": "[lime]{0}[default] gave you [lime]{1}[default] credits. Balance: [lime]{2}[default].",
 
   "shop.credits.admin.remove.usage": "Usage: [lightyellow]removecredits <target> <amount>[default]",

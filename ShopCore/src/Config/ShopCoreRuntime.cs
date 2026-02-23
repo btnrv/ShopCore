@@ -206,14 +206,27 @@ public partial class ShopCore
 
     private void SubscribeEvents()
     {
+        Core.Event.OnClientSteamAuthorize += OnClientSteamAuthorize;
         Core.Event.OnClientPutInServer += OnClientPutInServer;
         Core.Event.OnClientDisconnected += OnClientDisconnected;
     }
 
     private void UnsubscribeEvents()
     {
+        Core.Event.OnClientSteamAuthorize -= OnClientSteamAuthorize;
         Core.Event.OnClientPutInServer -= OnClientPutInServer;
         Core.Event.OnClientDisconnected -= OnClientDisconnected;
+    }
+
+    private void OnClientSteamAuthorize(IOnClientSteamAuthorizeEvent @event)
+    {
+        var player = Core.PlayerManager.GetPlayer(@event.PlayerId);
+        if (player is null || !player.IsValid || player.IsFakeClient)
+        {
+            return;
+        }
+
+        MarkCookieWarmupPending(player.SteamID);
     }
 
     private void OnClientPutInServer(IOnClientPutInServerEvent @event)
@@ -225,7 +238,8 @@ public partial class ShopCore
         }
 
         playerSteamIds[player.PlayerID] = player.SteamID;
-        EnsureStartingBalance(player);
+        MarkCookieWarmupPending(player.SteamID);
+        _ = RunAfterCookieWarmup(player, EnsureStartingBalance, notifyIfDelayed: false);
     }
 
     private void OnClientDisconnected(IOnClientDisconnectedEvent @event)
@@ -244,20 +258,23 @@ public partial class ShopCore
         }
 
         _ = playerSteamIds.Remove(playerId);
+        ClearCookieWarmupState(steamId);
 
-        // Persist cookies and economy data when client disconnects to reduce data-loss risk.
+        // Cookies plugin already enqueues writes on Set/Unset and performs its own async disconnect flush.
+        // Calling playerCookies.Save(...) here blocks the game thread with synchronous DB I/O.
+        // Keep only Economy persistence here (contract varies, no safe non-blocking path without implementation guarantees).
         try
         {
             if (player is not null && player.IsValid && !player.IsFakeClient)
             {
-                playerCookies.Save(player);
+                FlushPlayerCookiesAsync(player.SteamID);
                 _ = TrySaveEconomyData(player);
                 return;
             }
 
             if (steamId != 0)
             {
-                playerCookies.Save((long)steamId);
+                FlushPlayerCookiesAsync(steamId);
                 _ = TrySaveEconomyData(steamId);
             }
             else
@@ -336,7 +353,8 @@ public partial class ShopCore
                 continue;
             }
 
-            EnsureStartingBalance(player);
+            MarkCookieWarmupPending(player.SteamID);
+            _ = RunAfterCookieWarmup(player, EnsureStartingBalance, notifyIfDelayed: false);
         }
     }
 
@@ -368,7 +386,6 @@ public partial class ShopCore
         if (Settings.Credits.GrantStartingBalanceOncePerPlayer)
         {
             playerCookies.Set(player, StartingBalanceCookieKey, true);
-            playerCookies.Save(player);
         }
     }
 
@@ -602,4 +619,3 @@ public partial class ShopCore
         }
     }
 }
-
