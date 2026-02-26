@@ -203,6 +203,7 @@ public class Shop_Coinflip : BasePlugin
             return;
         }
 
+        var balanceBeforeBet = shopApi.GetCredits(player);
         if (!shopApi.SubtractCredits(player, bet))
         {
             Reply(context, "coinflip.internal_error");
@@ -214,14 +215,29 @@ public class Shop_Coinflip : BasePlugin
             cooldownBySteam[player.SteamID] = DateTimeOffset.UtcNow.AddSeconds(settings.BetCooldownSeconds);
         }
 
+<<<<<<< HEAD
         var balanceAfterBet = shopApi.GetCredits(player);
+=======
+        var balanceAfterBet = balanceBeforeBet - bet;
+>>>>>>> be2690846b46f4b7d39b0c33294f7b9788c7e7b2
         var won = Random.Shared.NextDouble() <= Math.Clamp(settings.WinChance, 0.0, 1.0);
         if (won)
         {
             var reward = Math.Max(1, (int)Math.Round(bet * settings.WinMultiplier, MidpointRounding.AwayFromZero));
+<<<<<<< HEAD
             _ = shopApi.AddCredits(player, reward);
             var balance = balanceAfterBet + reward;
             Reply(context, "coinflip.won", reward, balance);
+=======
+            if (!shopApi.AddCredits(player, reward))
+            {
+                Reply(context, "coinflip.internal_error");
+                return;
+            }
+
+            var wonBalance = balanceAfterBet + reward;
+            Reply(context, "coinflip.won", reward, wonBalance);
+>>>>>>> be2690846b46f4b7d39b0c33294f7b9788c7e7b2
             return;
         }
 

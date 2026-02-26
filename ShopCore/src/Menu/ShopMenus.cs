@@ -125,8 +125,9 @@ public partial class ShopCore
         foreach (var categoryGroup in grouped)
         {
             var category = categoryGroup.Key;
+            var displayCategory = LocalizeCategorySegment(player, category);
             var count = categoryGroup.Count();
-            var categoryButton = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", category, count));
+            var categoryButton = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", displayCategory, count));
             categoryButton.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
@@ -147,8 +148,9 @@ public partial class ShopCore
 
         if (items.Length == 0)
         {
-            var emptyBuilder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, category);
-            _ = emptyBuilder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category", category)) { Enabled = false });
+            var localizedCategory = LocalizeCategorySegment(player, category);
+            var emptyBuilder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, localizedCategory);
+            _ = emptyBuilder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category", localizedCategory)) { Enabled = false });
             return emptyBuilder.Build();
         }
 
@@ -163,11 +165,14 @@ public partial class ShopCore
             return BuildBuyItemsMenu(player, category, null, parent);
         }
 
-        var builder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, category);
+        var localizedCategoryTitle = LocalizeCategorySegment(player, category);
+        var builder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, localizedCategoryTitle);
         foreach (var subgroup in grouped)
         {
             var subcategory = string.IsNullOrWhiteSpace(subgroup.Key) ? null : subgroup.Key;
-            var displayName = subcategory ?? Localize(player, "shop.menu.subcategory.general");
+            var displayName = subcategory is null
+                ? Localize(player, "shop.menu.subcategory.general")
+                : LocalizeSubcategorySegment(player, subcategory);
             var count = subgroup.Count();
             var button = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", displayName, count));
             button.Click += (sender, args) =>
@@ -184,7 +189,7 @@ public partial class ShopCore
 
     private IMenuAPI BuildBuyItemsMenu(IPlayer player, string category, string? subcategory = null, IMenuAPI? parent = null)
     {
-        var categoryPathText = BuildCategoryPathText(category, subcategory);
+        var categoryPathText = BuildLocalizedCategoryPathText(player, category, subcategory);
         var builder = CreateBaseMenuBuilder(player, "shop.menu.buy.category.title", parent, categoryPathText);
         var items = shopApi.GetItems()
             .Where(item => item.Enabled)
@@ -277,8 +282,9 @@ public partial class ShopCore
         foreach (var categoryGroup in grouped)
         {
             var category = categoryGroup.Key;
+            var displayCategory = LocalizeCategorySegment(player, category);
             var count = categoryGroup.Count();
-            var categoryButton = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", category, count));
+            var categoryButton = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", displayCategory, count));
             categoryButton.Click += (sender, args) =>
             {
                 var parentMenu = (sender as IMenuOption)?.Menu;
@@ -304,8 +310,9 @@ public partial class ShopCore
 
         if (items.Length == 0)
         {
-            var emptyBuilder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, category);
-            _ = emptyBuilder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category_inventory", category)) { Enabled = false });
+            var localizedCategory = LocalizeCategorySegment(player, category);
+            var emptyBuilder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, localizedCategory);
+            _ = emptyBuilder.AddOption(new TextMenuOption(Localize(player, "shop.menu.empty.category_inventory", localizedCategory)) { Enabled = false });
             return emptyBuilder.Build();
         }
 
@@ -320,11 +327,14 @@ public partial class ShopCore
             return BuildInventoryItemsMenu(player, category, null, snapshot, parent);
         }
 
-        var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, category);
+        var localizedCategoryTitle = LocalizeCategorySegment(player, category);
+        var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, localizedCategoryTitle);
         foreach (var subgroup in grouped)
         {
             var subcategory = string.IsNullOrWhiteSpace(subgroup.Key) ? null : subgroup.Key;
-            var displayName = subcategory ?? Localize(player, "shop.menu.subcategory.general");
+            var displayName = subcategory is null
+                ? Localize(player, "shop.menu.subcategory.general")
+                : LocalizeSubcategorySegment(player, subcategory);
             var count = subgroup.Count();
             var button = new ButtonMenuOption(Localize(player, "shop.menu.category.entry", displayName, count));
             button.Click += (sender, args) =>
@@ -346,7 +356,7 @@ public partial class ShopCore
         IReadOnlyCollection<InventoryItemSnapshot>? inventorySnapshot = null,
         IMenuAPI? parent = null)
     {
-        var categoryPathText = BuildCategoryPathText(category, subcategory);
+        var categoryPathText = BuildLocalizedCategoryPathText(player, category, subcategory);
         var builder = CreateBaseMenuBuilder(player, "shop.menu.inventory.category.title", parent, categoryPathText);
         var snapshot = inventorySnapshot ?? BuildInventorySnapshot(player);
         var items = snapshot
@@ -625,13 +635,54 @@ public partial class ShopCore
         return string.Equals(parsed.Subcategory, subcategory, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string BuildCategoryPathText(string category, string? subcategory)
+    private string BuildLocalizedCategoryPathText(IPlayer player, string category, string? subcategory)
     {
+        var localizedCategory = LocalizeCategorySegment(player, category);
         if (string.IsNullOrWhiteSpace(subcategory))
         {
-            return category;
+            return localizedCategory;
         }
 
-        return $"{category} > {subcategory}";
+        var localizedSubcategory = LocalizeSubcategorySegment(player, subcategory);
+        return $"{localizedCategory} > {localizedSubcategory}";
+    }
+
+    private string LocalizeCategorySegment(IPlayer player, string segment)
+    {
+        return LocalizeCategoryLikeSegment(player, segment, "shop.menu.category");
+    }
+
+    private string LocalizeSubcategorySegment(IPlayer player, string segment)
+    {
+        return LocalizeCategoryLikeSegment(player, segment, "shop.menu.subcategory");
+    }
+
+    private string LocalizeCategoryLikeSegment(IPlayer player, string segment, string keyPrefix)
+    {
+        if (string.IsNullOrWhiteSpace(segment))
+        {
+            return segment;
+        }
+
+        var key = $"{keyPrefix}.{ToTranslationSlug(segment)}";
+        var localized = Localize(player, key);
+        return string.Equals(localized, key, StringComparison.Ordinal) ? segment : localized;
+    }
+
+    private static string ToTranslationSlug(string input)
+    {
+        var chars = input
+            .Trim()
+            .ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '_')
+            .ToArray();
+
+        var collapsed = new string(chars);
+        while (collapsed.Contains("__", StringComparison.Ordinal))
+        {
+            collapsed = collapsed.Replace("__", "_", StringComparison.Ordinal);
+        }
+
+        return collapsed.Trim('_');
     }
 }
